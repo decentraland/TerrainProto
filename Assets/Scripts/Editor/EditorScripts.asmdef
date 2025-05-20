@@ -1,0 +1,18 @@
+{
+    "name": "EditorScripts",
+    "rootNamespace": "Decentraland.Terrain",
+    "references": [
+        "GUID:b316ed1b305661242acc1362be10d894"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
