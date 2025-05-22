@@ -7,9 +7,9 @@ namespace Decentraland.Terrain
     [ExecuteAlways]
     public sealed class TerrainRenderer : MonoBehaviour
     {
-        [SerializeField] private Material material;
         [SerializeField] private int parcelSize = 16;
         [SerializeField] private int terrainSize;
+        [SerializeField] private Material material;
 
         private Mesh parcelMesh;
         private RenderParams renderParams;
@@ -81,7 +81,7 @@ namespace Decentraland.Terrain
         {
             var parcelMesh = new Mesh()
             {
-                name = "Terrain Parcel",
+                name = "Parcel Render Mesh",
                 hideFlags = HideFlags.DontSave
             };
 
