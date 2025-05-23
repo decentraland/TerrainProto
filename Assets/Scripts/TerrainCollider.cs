@@ -13,11 +13,10 @@ namespace Decentraland.Terrain
 {
     public sealed class TerrainCollider : MonoBehaviour
     {
-        [SerializeField] private int parcelSize = 16;
-        [SerializeField] private int terrainSize;
+        [SerializeField] private TerrainData terrainData;
 
-        private readonly List<ParcelData> freeParcels = new();
-        private readonly List<ParcelData> usedParcels = new();
+        private List<ParcelData> freeParcels = new();
+        private List<ParcelData> usedParcels = new();
 
         private void Update()
         {
@@ -26,9 +25,10 @@ namespace Decentraland.Terrain
             if (mainCamera == null)
                 return;
 
-            float useRadius = parcelSize / 3f;
+            int parcelSize = terrainData.parcelSize;
+            float useRadius = parcelSize * (1f / 3f);
             var cameraPosition = mainCamera.transform.position;
-            RectInt usedRect = WorldPositionToParcelRect(cameraPosition, useRadius);
+            RectInt usedRect = terrainData.WorldPositionToParcelRect(cameraPosition, useRadius);
 
             for (int i = usedParcels.Count - 1; i >= 0; i--)
             {
@@ -94,9 +94,8 @@ namespace Decentraland.Terrain
                     SetParcelMeshVertices(parcelData.mesh, parcel);
                     SetParcelMeshIndicesAndNormals(parcelData.mesh);
 
-                    parcelData.mesh.bounds = new Bounds(
-                        new Vector3(parcelSize * 0.5f, 1.5f, parcelSize * 0.5f),
-                        new Vector3(parcelSize, 3f, parcelSize));
+                    Vector3 parcelMax = new Vector3(parcelSize, terrainData.maxHeight, parcelSize);
+                    parcelData.mesh.bounds = new Bounds(parcelMax * 0.5f, parcelMax);
 
                     parcelData.collider = new GameObject("Parcel Collider")
                         .AddComponent<MeshCollider>();
@@ -146,6 +145,7 @@ namespace Decentraland.Terrain
 
         private void SetParcelMeshIndicesAndNormals(Mesh mesh)
         {
+            int parcelSize = terrainData.parcelSize;
             int sideVertexCount = parcelSize + 1;
 
             using (ListPool<int>.Get(out var triangles))
@@ -190,6 +190,7 @@ namespace Decentraland.Terrain
         private void SetParcelMeshVertices(Mesh mesh, Vector2Int parcel)
         {
             Profiler.BeginSample(nameof(SetParcelMeshVertices));
+            int parcelSize = terrainData.parcelSize;
             float3 parcelOrigin = float3(parcel.x * parcelSize, 0f, parcel.y * parcelSize);
 
             using (ListPool<Vector3>.Get(out var vertices))
@@ -220,27 +221,6 @@ namespace Decentraland.Terrain
             }
 
             Profiler.EndSample();
-        }
-
-        private Vector2Int WorldPositionToParcel(Vector3 value)
-        {
-            return new Vector2Int(
-                Mathf.RoundToInt(value.x / parcelSize - 0.5f),
-                Mathf.RoundToInt(value.z / parcelSize - 0.5f));
-        }
-
-        private Vector2Int WorldPositionToParcel(float x, float z)
-        {
-            return new Vector2Int(
-                Mathf.RoundToInt(x / parcelSize - 0.5f),
-                Mathf.RoundToInt(z / parcelSize - 0.5f));
-        }
-
-        private RectInt WorldPositionToParcelRect(Vector3 position, float halfSize)
-        {
-            Vector2Int min = WorldPositionToParcel(position.x - halfSize, position.z - halfSize);
-            Vector2Int max = WorldPositionToParcel(position.x + halfSize, position.z + halfSize);
-            return new RectInt(min.x, min.y, max.x - min.x + 1, max.y - min.y + 1);
         }
 
         private static void MountainsNoise_float(float3 positionIn, float scale, float2 octave0, float2 octave1,

@@ -149,8 +149,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f13968779bf625e4c9139b3a2108e7b4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  parcelSize: 16
-  terrainSize: 4
+  terrainData: {fileID: 11400000, guid: 0ab6e914d370dba43abc414c54cd88b7, type: 2}
   material: {fileID: 2100000, guid: 7e6b9dea3fa74574aa8dc9c031f42a71, type: 2}
 --- !u!4 &248761157
 Transform:
@@ -179,8 +178,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 88f6f4f663e38a84d8daccd1c147597e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  parcelSize: 16
-  terrainSize: 4
+  terrainData: {fileID: 11400000, guid: 0ab6e914d370dba43abc414c54cd88b7, type: 2}
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -258,13 +256,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.1205906, y: 0.3794096, z: -0.04995029, w: 0.91597563}
-  m_LocalPosition: {x: 8.1, y: 2, z: 7.7}
+  m_LocalRotation: {x: 0.12316939, y: 0.32816002, z: -0.04320328, w: 0.93556064}
+  m_LocalPosition: {x: 2.8, y: 2, z: 0.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 15, y: 45, z: 0}
+  m_LocalEulerAnglesHint: {x: 15, y: 38.658, z: 0}
 --- !u!114 &330585547
 MonoBehaviour:
   m_ObjectHideFlags: 0
