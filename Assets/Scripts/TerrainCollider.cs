@@ -27,15 +27,86 @@ namespace Decentraland.Terrain
                 return;
 
             float loadRadius = parcelSize / 3f;
-            float unloadRadius = loadRadius * 2f;
+            float keepRadius = loadRadius * 2f;
             var cameraPosition = mainCamera.transform.position;
 
-            {
-                Vector2Int cameraParcel = new Vector2Int(
-                    Mathf.RoundToInt(cameraPosition.x / parcelSize - 0.5f),
-                    Mathf.RoundToInt(cameraPosition.z / parcelSize - 0.5f));
+            RectInt keepRect = WorldPositionToParcelRect(cameraPosition, keepRadius);
 
-                Vector3 a = new Vector3(cameraParcel.x * parcelSize, cameraPosition.y, cameraParcel.y * parcelSize);
+            for (int i = usedParcels.Count - 1; i >= 0; i--)
+            {
+                ParcelData parcelData = usedParcels[i];
+                if (!keepRect.Contains(parcelData.parcel))
+                {
+                    usedParcels.RemoveAtSwapBack(i);
+                    freeParcels.Add(parcelData);
+                }
+            }
+
+            RectInt loadRect = WorldPositionToParcelRect(cameraPosition, loadRadius);
+
+            for (int y = loadRect.yMin; y < loadRect.yMax; y++)
+            for (int x = loadRect.xMin; x < loadRect.xMax; x++)
+            {
+                Vector2Int parcel = new Vector2Int(x, y);
+
+                if (usedParcels.Any(i => i.parcel == parcel))
+                    continue;
+
+                if (freeParcels.Count > 0)
+                {
+                    int lastIndex = freeParcels.Count - 1;
+                    ParcelData parcelData = freeParcels[lastIndex];
+                    freeParcels.RemoveAt(lastIndex);
+                    usedParcels.Add(parcelData);
+
+                    if (parcelData.parcel != parcel)
+                    {
+                        parcelData.parcel = parcel;
+
+                        SetParcelMeshVertices(parcelData.mesh, parcel);
+                        parcelData.mesh.MarkModified();
+                        parcelData.collider.sharedMesh = parcelData.mesh;
+
+                        parcelData.collider.transform.position = new Vector3(
+                            parcel.x * parcelSize, 0f, parcel.y * parcelSize);
+                    }
+                }
+                else
+                {
+                    ParcelData parcelData = new() { parcel = parcel, mesh = new Mesh() };
+                    usedParcels.Add(parcelData);
+
+                    parcelData.mesh.name = "Parcel Collision Mesh";
+                    parcelData.mesh.MarkDynamic();
+                    SetParcelMeshVertices(parcelData.mesh, parcel);
+                    SetParcelMeshIndicesAndNormals(parcelData.mesh);
+
+                    parcelData.mesh.bounds = new Bounds(
+                        new Vector3(parcelSize * 0.5f, 1.5f, parcelSize * 0.5f),
+                        new Vector3(parcelSize, 3f, parcelSize));
+
+                    parcelData.collider = new GameObject("Parcel Collider")
+                        .AddComponent<MeshCollider>();
+
+                    parcelData.collider.transform.position = new Vector3(
+                        parcel.x * parcelSize, 0f, parcel.y * parcelSize);
+
+                    parcelData.collider.sharedMesh = parcelData.mesh;
+
+#if UNITY_EDITOR
+                    parcelData.collider.transform.SetParent(transform, true);
+#endif
+                }
+            }
+
+
+#if UNITY_EDITOR
+            for (int y = loadRect.yMin; y < loadRect.yMax; y++)
+            for (int x = loadRect.xMin; x < loadRect.xMax; x++)
+            {
+                Vector2Int parcel = new Vector2Int(x, y);
+
+                Vector3 a = new Vector3(parcel.x * parcelSize, cameraPosition.y, parcel.y * parcelSize);
                 Vector3 b = a + new Vector3(parcelSize, 0f, 0f);
                 Vector3 c = a + new Vector3(parcelSize, 0f, parcelSize);
                 Vector3 d = a + new Vector3(0f, 0f, parcelSize);
@@ -46,107 +117,30 @@ namespace Decentraland.Terrain
                 Debug.DrawLine(d, a, Color.white);
             }
 
-            using (HashSetPool<Vector2Int>.Get(out var toLoad))
-            using (HashSetPool<Vector2Int>.Get(out var toKeep))
             {
-                {
-                    Vector3 a = cameraPosition + new Vector3(-loadRadius, 0f, -loadRadius);
-                    Vector3 b = cameraPosition + new Vector3(loadRadius, 0f, -loadRadius);
-                    Vector3 c = cameraPosition + new Vector3(loadRadius, 0f, loadRadius);
-                    Vector3 d = cameraPosition + new Vector3(-loadRadius, 0f, loadRadius);
+                Vector3 a = cameraPosition + new Vector3(-loadRadius, 0f, -loadRadius);
+                Vector3 b = cameraPosition + new Vector3(loadRadius, 0f, -loadRadius);
+                Vector3 c = cameraPosition + new Vector3(loadRadius, 0f, loadRadius);
+                Vector3 d = cameraPosition + new Vector3(-loadRadius, 0f, loadRadius);
 
-                    Debug.DrawLine(a, b, Color.green);
-                    Debug.DrawLine(b, c, Color.green);
-                    Debug.DrawLine(c, d, Color.green);
-                    Debug.DrawLine(d, a, Color.green);
-
-                    toLoad.Add(WorldPositionToParcel(a));
-                    toLoad.Add(WorldPositionToParcel(b));
-                    toLoad.Add(WorldPositionToParcel(c));
-                    toLoad.Add(WorldPositionToParcel(d));
-                }
-
-                toKeep.UnionWith(toLoad);
-
-                {
-                    Vector3 a = cameraPosition + new Vector3(-unloadRadius, 0f, -unloadRadius);
-                    Vector3 b = cameraPosition + new Vector3(unloadRadius, 0f, -unloadRadius);
-                    Vector3 c = cameraPosition + new Vector3(unloadRadius, 0f, unloadRadius);
-                    Vector3 d = cameraPosition + new Vector3(-unloadRadius, 0f, unloadRadius);
-
-                    Debug.DrawLine(a, b, Color.red);
-                    Debug.DrawLine(b, c, Color.red);
-                    Debug.DrawLine(c, d, Color.red);
-                    Debug.DrawLine(d, a, Color.red);
-
-                    toKeep.Add(WorldPositionToParcel(a));
-                    toKeep.Add(WorldPositionToParcel(b));
-                    toKeep.Add(WorldPositionToParcel(c));
-                    toKeep.Add(WorldPositionToParcel(d));
-                }
-
-                for (int i = usedParcels.Count - 1; i >= 0; i--)
-                {
-                    ParcelData parcelData = usedParcels[i];
-                    if (!toKeep.Contains(parcelData.parcel))
-                    {
-                        usedParcels.RemoveAtSwapBack(i);
-                        freeParcels.Add(parcelData);
-                    }
-                }
-
-                foreach (Vector2Int parcel in toLoad)
-                {
-                    if (usedParcels.Any(i => i.parcel == parcel))
-                        continue;
-
-                    if (freeParcels.Count > 0)
-                    {
-                        int lastIndex = freeParcels.Count - 1;
-                        ParcelData parcelData = freeParcels[lastIndex];
-                        freeParcels.RemoveAt(lastIndex);
-                        usedParcels.Add(parcelData);
-
-                        if (parcelData.parcel != parcel)
-                        {
-                            parcelData.parcel = parcel;
-
-                            SetParcelMeshVertices(parcelData.mesh, parcel);
-                            parcelData.mesh.MarkModified();
-                            parcelData.collider.sharedMesh = parcelData.mesh;
-
-                            parcelData.collider.transform.position = new Vector3(
-                                parcel.x * parcelSize, 0f, parcel.y * parcelSize);
-                        }
-                    }
-                    else
-                    {
-                        ParcelData parcelData = new() { parcel = parcel, mesh = new Mesh() };
-                        usedParcels.Add(parcelData);
-
-                        parcelData.mesh.name = "Parcel Collision Mesh";
-                        parcelData.mesh.MarkDynamic();
-                        SetParcelMeshVertices(parcelData.mesh, parcel);
-                        SetParcelMeshIndicesAndNormals(parcelData.mesh);
-
-                        parcelData.mesh.bounds = new Bounds(
-                            new Vector3(parcelSize * 0.5f, 1.5f, parcelSize * 0.5f),
-                            new Vector3(parcelSize, 3f, parcelSize));
-
-                        parcelData.collider = new GameObject("Parcel Collider")
-                            .AddComponent<MeshCollider>();
-
-                        parcelData.collider.transform.position = new Vector3(
-                            parcel.x * parcelSize, 0f, parcel.y * parcelSize);
-
-                        parcelData.collider.sharedMesh = parcelData.mesh;
-
-#if UNITY_EDITOR
-                        parcelData.collider.transform.SetParent(transform, true);
-#endif
-                    }
-                }
+                Debug.DrawLine(a, b, Color.green);
+                Debug.DrawLine(b, c, Color.green);
+                Debug.DrawLine(c, d, Color.green);
+                Debug.DrawLine(d, a, Color.green);
             }
+
+            {
+                Vector3 a = cameraPosition + new Vector3(-keepRadius, 0f, -keepRadius);
+                Vector3 b = cameraPosition + new Vector3(keepRadius, 0f, -keepRadius);
+                Vector3 c = cameraPosition + new Vector3(keepRadius, 0f, keepRadius);
+                Vector3 d = cameraPosition + new Vector3(-keepRadius, 0f, keepRadius);
+
+                Debug.DrawLine(a, b, Color.red);
+                Debug.DrawLine(b, c, Color.red);
+                Debug.DrawLine(c, d, Color.red);
+                Debug.DrawLine(d, a, Color.red);
+            }
+#endif
         }
 
         private void SetParcelMeshIndicesAndNormals(Mesh mesh)
@@ -176,6 +170,8 @@ namespace Decentraland.Terrain
                 mesh.SetTriangles(triangles, 0, false);
             }
 
+            // Normals are only needed to draw the collider gizmo.
+#if UNITY_EDITOR
             using (ListPool<Vector3>.Get(out var normals))
             {
                 int normalsCount = sideVertexCount * sideVertexCount;
@@ -187,6 +183,7 @@ namespace Decentraland.Terrain
                 mesh.SetNormals(normals, 0, normalsCount,
                     MeshUpdateFlags.DontNotifyMeshUsers | MeshUpdateFlags.DontRecalculateBounds);
             }
+#endif
         }
 
         private void SetParcelMeshVertices(Mesh mesh, Vector2Int parcel)
@@ -224,11 +221,25 @@ namespace Decentraland.Terrain
             Profiler.EndSample();
         }
 
-        private Vector2Int WorldPositionToParcel(Vector3 worldPosition)
+        private Vector2Int WorldPositionToParcel(Vector3 value)
         {
             return new Vector2Int(
-                Mathf.RoundToInt(worldPosition.x / parcelSize - 0.5f),
-                Mathf.RoundToInt(worldPosition.z / parcelSize - 0.5f));
+                Mathf.RoundToInt(value.x / parcelSize - 0.5f),
+                Mathf.RoundToInt(value.z / parcelSize - 0.5f));
+        }
+
+        private Vector2Int WorldPositionToParcel(float x, float z)
+        {
+            return new Vector2Int(
+                Mathf.RoundToInt(x / parcelSize - 0.5f),
+                Mathf.RoundToInt(z / parcelSize - 0.5f));
+        }
+
+        private RectInt WorldPositionToParcelRect(Vector3 position, float halfSize)
+        {
+            Vector2Int min = WorldPositionToParcel(position.x - halfSize, position.z - halfSize);
+            Vector2Int max = WorldPositionToParcel(position.x + halfSize, position.z + halfSize);
+            return new RectInt(min.x, min.y, max.x - min.x + 1, max.y - min.y + 1);
         }
 
         private static void MountainsNoise_float(float3 positionIn, float scale, float2 octave0, float2 octave1,
