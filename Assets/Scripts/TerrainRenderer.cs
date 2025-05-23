@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Pool;
 using UnityEngine.Rendering;
 
 namespace Decentraland.Terrain
@@ -13,7 +14,6 @@ namespace Decentraland.Terrain
 
         private Mesh parcelMesh;
         private RenderParams renderParams;
-        private Matrix4x4[] instanceData;
 
 #if UNITY_EDITOR
         public Mesh ParcelMesh => parcelMesh;
@@ -45,13 +45,6 @@ namespace Decentraland.Terrain
             renderParams.worldBounds = new Bounds(
                 new Vector3(0f, 2f, 0f),
                 new Vector3(terrainHalfSize, 4f, terrainHalfSize));
-
-            instanceData = new Matrix4x4[terrainSize * terrainSize];
-
-            for (int z = 0; z < terrainSize; z++)
-                for (int x = 0; x < terrainSize; x++)
-                    instanceData[z * terrainSize + x] = Matrix4x4.Translate(
-                        new Vector3(x * parcelSize - terrainHalfSize, 0f, z * parcelSize - terrainHalfSize));
         }
 
         private void OnEnable()
@@ -127,7 +120,58 @@ namespace Decentraland.Terrain
 
         private void DrawParcels(ScriptableRenderContext context, List<Camera> cameras)
         {
-            Graphics.RenderMeshInstanced(in renderParams, parcelMesh, 0, instanceData);
+            Camera mainCamera = Camera.main;
+
+            if (mainCamera == null)
+                return;
+
+            float parcelRadius = parcelSize * Mathf.Sqrt(2f);
+            float terrainHalfSize = parcelSize * terrainSize * 0.5f;
+            var worldToProjectionMatrix = mainCamera.projectionMatrix * mainCamera.worldToCameraMatrix;
+
+            Vector4 p1 = worldToProjectionMatrix.GetRow(0);
+            Vector4 p2 = worldToProjectionMatrix.GetRow(1);
+            Vector4 p3 = worldToProjectionMatrix.GetRow(2);
+            Vector4 p4 = worldToProjectionMatrix.GetRow(3);
+
+            Vector4 clipPlane0 = p4 + p3;
+            clipPlane0 /= ((Vector3)clipPlane0).magnitude;
+            Vector4 clipPlane1 = p4 - p3;
+            clipPlane1 /= ((Vector3)clipPlane1).magnitude;
+            Vector4 clipPlane2 = p4 + p1;
+            clipPlane2 /= ((Vector3)clipPlane2).magnitude;
+            Vector4 clipPlane3 = p4 - p1;
+            clipPlane3 /= ((Vector3)clipPlane3).magnitude;
+            Vector4 clipPlane4 = p4 + p2;
+            clipPlane4 /= ((Vector3)clipPlane4).magnitude;
+            Vector4 clipPlane5 = p4 - p2;
+            clipPlane5 /= ((Vector3)clipPlane5).magnitude;
+
+            using (ListPool<Matrix4x4>.Get(out var instanceData))
+            {
+                for (int z = 0; z < terrainSize; z++)
+                for (int x = 0; x < terrainSize; x++)
+                {
+                    Vector4 parcelCenter = new Vector4(
+                        x * parcelSize - terrainHalfSize + parcelSize * 0.5f, 1.5f,
+                        z * parcelSize - terrainHalfSize + parcelSize * 0.5f, 1f);
+
+                    if (Vector4.Dot(clipPlane0, parcelCenter) < -parcelRadius
+                        || Vector4.Dot(clipPlane1, parcelCenter) < -parcelRadius
+                        || Vector4.Dot(clipPlane2, parcelCenter) < -parcelRadius
+                        || Vector4.Dot(clipPlane3, parcelCenter) < -parcelRadius
+                        || Vector4.Dot(clipPlane4, parcelCenter) < -parcelRadius
+                        || Vector4.Dot(clipPlane5, parcelCenter) < -parcelRadius)
+                    {
+                        continue;
+                    }
+
+                    instanceData.Add(Matrix4x4.Translate(
+                        new Vector3(x * parcelSize - terrainHalfSize, 0f, z * parcelSize - terrainHalfSize)));
+                }
+
+                Graphics.RenderMeshInstanced(in renderParams, parcelMesh, 0, instanceData);
+            }
         }
     }
 }
