@@ -26,26 +26,23 @@ namespace Decentraland.Terrain
             if (mainCamera == null)
                 return;
 
-            float loadRadius = parcelSize / 3f;
-            float keepRadius = loadRadius * 2f;
+            float useRadius = parcelSize / 3f;
             var cameraPosition = mainCamera.transform.position;
-
-            RectInt keepRect = WorldPositionToParcelRect(cameraPosition, keepRadius);
+            RectInt usedRect = WorldPositionToParcelRect(cameraPosition, useRadius);
 
             for (int i = usedParcels.Count - 1; i >= 0; i--)
             {
                 ParcelData parcelData = usedParcels[i];
-                if (!keepRect.Contains(parcelData.parcel))
+
+                if (!usedRect.Contains(parcelData.parcel))
                 {
                     usedParcels.RemoveAtSwapBack(i);
                     freeParcels.Add(parcelData);
                 }
             }
 
-            RectInt loadRect = WorldPositionToParcelRect(cameraPosition, loadRadius);
-
-            for (int y = loadRect.yMin; y < loadRect.yMax; y++)
-            for (int x = loadRect.xMin; x < loadRect.xMax; x++)
+            for (int y = usedRect.yMin; y < usedRect.yMax; y++)
+            for (int x = usedRect.xMin; x < usedRect.xMax; x++)
             {
                 Vector2Int parcel = new Vector2Int(x, y);
 
@@ -54,17 +51,33 @@ namespace Decentraland.Terrain
 
                 if (freeParcels.Count > 0)
                 {
-                    int lastIndex = freeParcels.Count - 1;
-                    ParcelData parcelData = freeParcels[lastIndex];
-                    freeParcels.RemoveAt(lastIndex);
-                    usedParcels.Add(parcelData);
+                    ParcelData parcelData = null;
 
-                    if (parcelData.parcel != parcel)
+                    // First, check if the exact parcel we need is in the free list already. If so,
+                    // there's nothing to do.
+                    for (int i = freeParcels.Count - 1; i >= 0; i--)
                     {
+                        ParcelData freeParcel = freeParcels[i];
+
+                        if (freeParcel.parcel == parcel)
+                        {
+                            parcelData = freeParcel;
+                            freeParcels.RemoveAtSwapBack(i);
+                            usedParcels.Add(parcelData);
+                            break;
+                        }
+                    }
+
+                    // Else, reuse the last parcel in the free list.
+                    if (parcelData == null)
+                    {
+                        int lastIndex = freeParcels.Count - 1;
+                        parcelData = freeParcels[lastIndex];
                         parcelData.parcel = parcel;
+                        freeParcels.RemoveAt(lastIndex);
+                        usedParcels.Add(parcelData);
 
                         SetParcelMeshVertices(parcelData.mesh, parcel);
-                        parcelData.mesh.MarkModified();
                         parcelData.collider.sharedMesh = parcelData.mesh;
 
                         parcelData.collider.transform.position = new Vector3(
@@ -101,8 +114,8 @@ namespace Decentraland.Terrain
 
 
 #if UNITY_EDITOR
-            for (int y = loadRect.yMin; y < loadRect.yMax; y++)
-            for (int x = loadRect.xMin; x < loadRect.xMax; x++)
+            for (int y = usedRect.yMin; y < usedRect.yMax; y++)
+            for (int x = usedRect.xMin; x < usedRect.xMax; x++)
             {
                 Vector2Int parcel = new Vector2Int(x, y);
 
@@ -118,27 +131,15 @@ namespace Decentraland.Terrain
             }
 
             {
-                Vector3 a = cameraPosition + new Vector3(-loadRadius, 0f, -loadRadius);
-                Vector3 b = cameraPosition + new Vector3(loadRadius, 0f, -loadRadius);
-                Vector3 c = cameraPosition + new Vector3(loadRadius, 0f, loadRadius);
-                Vector3 d = cameraPosition + new Vector3(-loadRadius, 0f, loadRadius);
+                Vector3 a = cameraPosition + new Vector3(-useRadius, 0f, -useRadius);
+                Vector3 b = cameraPosition + new Vector3(useRadius, 0f, -useRadius);
+                Vector3 c = cameraPosition + new Vector3(useRadius, 0f, useRadius);
+                Vector3 d = cameraPosition + new Vector3(-useRadius, 0f, useRadius);
 
                 Debug.DrawLine(a, b, Color.green);
                 Debug.DrawLine(b, c, Color.green);
                 Debug.DrawLine(c, d, Color.green);
                 Debug.DrawLine(d, a, Color.green);
-            }
-
-            {
-                Vector3 a = cameraPosition + new Vector3(-keepRadius, 0f, -keepRadius);
-                Vector3 b = cameraPosition + new Vector3(keepRadius, 0f, -keepRadius);
-                Vector3 c = cameraPosition + new Vector3(keepRadius, 0f, keepRadius);
-                Vector3 d = cameraPosition + new Vector3(-keepRadius, 0f, keepRadius);
-
-                Debug.DrawLine(a, b, Color.red);
-                Debug.DrawLine(b, c, Color.red);
-                Debug.DrawLine(c, d, Color.red);
-                Debug.DrawLine(d, a, Color.red);
             }
 #endif
         }
