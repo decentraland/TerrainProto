@@ -37,8 +37,8 @@ namespace Decentraland.Terrain
         [Serializable]
         public struct TreePrefab
         {
-            public GameObject prefab;
-            public int density;
+            public GameObject source;
+            public GameObject collider;
         }
     }
 }

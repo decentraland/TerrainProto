@@ -17,9 +17,9 @@ MonoBehaviour:
   terrainSize: 4
   maxHeight: 4
   treePrefabs:
-  - prefab: {fileID: 2214953459268991292, guid: 46ba147d6eb053147b59c469dd34425f, type: 3}
-    density: 1
-  - prefab: {fileID: 2187335638020092438, guid: a5880297cd94bc64697d703509a25311, type: 3}
-    density: 1
-  - prefab: {fileID: 757561452486300604, guid: f03a5d1da28bc6e4098274181dec6ed6, type: 3}
-    density: 1
+  - source: {fileID: 2214953459268991292, guid: 46ba147d6eb053147b59c469dd34425f, type: 3}
+    collider: {fileID: 7013496733605040723, guid: dcca3898bf9ce4a42ad171cb4313e6fa, type: 3}
+  - source: {fileID: 2187335638020092438, guid: a5880297cd94bc64697d703509a25311, type: 3}
+    collider: {fileID: 845438642989770326, guid: a99cd2a1ca9ce304fb5284edff5da8d1, type: 3}
+  - source: {fileID: 757561452486300604, guid: f03a5d1da28bc6e4098274181dec6ed6, type: 3}
+    collider: {fileID: 5731890515363948196, guid: 9306a250e75d66d4abb2fdcf55635aad, type: 3}

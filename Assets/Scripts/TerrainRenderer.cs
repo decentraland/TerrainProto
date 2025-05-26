@@ -207,7 +207,7 @@ namespace Decentraland.Terrain
 
                 // Tree rendering starts here.
 
-                Renderer treeRenderer = terrainData.treePrefabs[0].prefab.GetComponent<LODGroup>()
+                Renderer treeRenderer = terrainData.treePrefabs[0].source.GetComponent<LODGroup>()
                     .GetLODs()[0].renderers[0];
                 Mesh treeMesh = treeRenderer.GetComponent<MeshFilter>().sharedMesh;
 
