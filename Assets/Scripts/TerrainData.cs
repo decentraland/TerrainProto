@@ -3,9 +3,10 @@ using UnityEngine;
 
 namespace Decentraland.Terrain
 {
-    [CreateAssetMenu(menuName = "Decentraland/Terrain Data")]
+    [CreateAssetMenu(menuName = "Decentraland/Terrain/Terrain Data")]
     public sealed class TerrainData : ScriptableObject
     {
+		public TerrainNoiseFunction noiseFunction;
         public int parcelSize = 16;
         public int terrainSize;
         public float maxHeight;

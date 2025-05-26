@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Pool;
+using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 
 namespace Decentraland.Terrain
@@ -141,6 +142,8 @@ namespace Decentraland.Terrain
             if (camera == null)
                 return;
 
+            Profiler.BeginSample(nameof(DrawParcels));
+
             int parcelSize = terrainData.parcelSize;
             int terrainSize = terrainData.terrainSize;
             float parcelRadius = parcelSize * Mathf.Sqrt(2f);
@@ -166,7 +169,8 @@ namespace Decentraland.Terrain
             Vector4 clipPlane5 = p4 - p2;
             clipPlane5 /= ((Vector3)clipPlane5).magnitude;
 
-            using (ListPool<Matrix4x4>.Get(out var instanceData))
+            using (ListPool<Matrix4x4>.Get(out var parcelTransforms))
+            using (ListPool<Matrix4x4>.Get(out var treeTransforms))
             {
                 for (int z = 0; z < terrainSize; z++)
                 for (int x = 0; x < terrainSize; x++)
@@ -185,12 +189,50 @@ namespace Decentraland.Terrain
                         continue;
                     }
 
-                    instanceData.Add(Matrix4x4.Translate(
+                    parcelTransforms.Add(Matrix4x4.Translate(
                         new Vector3(x * parcelSize - terrainHalfSize, 0f, z * parcelSize - terrainHalfSize)));
+
+                    TerrainNoiseFunction noise = terrainData.noiseFunction;
+                    Vector3 treePos;
+                    treePos.x = noise.RandomRange(x, z, x * parcelSize - terrainHalfSize, (x + 1) * parcelSize - terrainHalfSize);
+                    treePos.z = noise.RandomRange(treePos.x, treePos.x, z * parcelSize - terrainHalfSize, (z + 1) * parcelSize - terrainHalfSize);
+                    treePos.y = noise.HeightMap(treePos.x, treePos.z);
+                    float treeYaw = noise.RandomRange(treePos.x, treePos.z, -180f, 180f);
+
+                    treeTransforms.Add(Matrix4x4.TRS(treePos, Quaternion.Euler(0f, treeYaw, 0f),
+                        Vector3.one));
                 }
 
-                Graphics.RenderMeshInstanced(in renderParams, parcelMesh, 0, instanceData);
+                Graphics.RenderMeshInstanced(in renderParams, parcelMesh, 0, parcelTransforms);
+
+                // Tree rendering starts here.
+
+                Renderer treeRenderer = terrainData.treePrefabs[0].prefab.GetComponent<LODGroup>()
+                    .GetLODs()[0].renderers[0];
+                Mesh treeMesh = treeRenderer.GetComponent<MeshFilter>().sharedMesh;
+
+                var treeParams = new RenderParams()
+                {
+                    instanceID = GetInstanceID(),
+                    layer = gameObject.layer,
+                    receiveShadows = true,
+                    renderingLayerMask = RenderingLayerMask.defaultRenderingLayerMask,
+                    shadowCastingMode = ShadowCastingMode.On
+                };
+
+                using (ListPool<Material>.Get(out var treeMaterials))
+                {
+                    treeRenderer.GetSharedMaterials(treeMaterials);
+
+                    for (int i = 0; i < treeMaterials.Count; i++)
+                    {
+                        treeParams.material = treeMaterials[i];
+                        Graphics.RenderMeshInstanced(in treeParams, treeMesh, i, treeTransforms);
+                    }
+                }
             }
+
+            Profiler.EndSample();
         }
     }
 }

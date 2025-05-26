@@ -1,13 +1,11 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.Collections;
-using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
-using static Unity.Mathematics.math;
-using static Unity.Mathematics.noise;
 
 namespace Decentraland.Terrain
 {
@@ -191,23 +189,21 @@ namespace Decentraland.Terrain
         {
             Profiler.BeginSample(nameof(SetParcelMeshVertices));
             int parcelSize = terrainData.parcelSize;
-            float3 parcelOrigin = float3(parcel.x * parcelSize, 0f, parcel.y * parcelSize);
+            TerrainNoiseFunction noise = terrainData.noiseFunction;
+            Vector2 parcelOriginXZ = new Vector2(parcel.x * parcelSize, parcel.y * parcelSize);
 
             using (ListPool<Vector3>.Get(out var vertices))
             {
                 int sideVertexCount = parcelSize + 1;
                 vertices.EnsureCapacity(sideVertexCount * sideVertexCount);
-                Profiler.BeginSample(nameof(MountainsNoise_float));
+                Profiler.BeginSample("MountainsNoise_float");
 
                 for (int z = 0; z < sideVertexCount; z++)
                 {
                     for (int x = 0; x < sideVertexCount; x++)
                     {
-                        MountainsNoise_float(float3(x, 0f, z) + parcelOrigin, 0.02f,
-                            float2(-99974.82f, -93748.33f), float2(-67502.3f, -22190.19f),
-                            float2(77881.34f, -61863.88f), 0.338f, 2.9f, 3f, out float3 vertex);
-
-                        vertices.Add(vertex - parcelOrigin);
+                        float y = noise.HeightMap(x + parcelOriginXZ.x, z + parcelOriginXZ.y);
+                        vertices.Add(new Vector3(x, y, z));
                     }
                 }
 
@@ -223,42 +219,7 @@ namespace Decentraland.Terrain
             Profiler.EndSample();
         }
 
-        private static void MountainsNoise_float(float3 positionIn, float scale, float2 octave0, float2 octave1,
-            float2 octave2,
-            float persistence, float lacunarity, float multiplyValue, out float3 positionOut)
-        {
-            float amplitude = 1f;
-            float frequency = 1f;
-            float noiseHeight = 0f;
-
-            // Octave 0
-            {
-                float2 sample = (positionIn.xz + octave0) * scale * frequency;
-                noiseHeight += snoise(sample) * amplitude;
-                amplitude *= persistence;
-                frequency *= lacunarity;
-            }
-
-            // Octave 1
-            {
-                float2 sample = (positionIn.xz + octave1) * scale * frequency;
-                noiseHeight += snoise(sample) * amplitude;
-                amplitude *= persistence;
-                frequency *= lacunarity;
-            }
-
-            // Octave 2
-            {
-                float2 sample = (positionIn.xz + octave2) * scale * frequency;
-                noiseHeight += snoise(sample) * amplitude;
-                amplitude *= persistence;
-                frequency *= lacunarity;
-            }
-
-            positionOut = positionIn;
-            positionOut.y += noiseHeight * multiplyValue;
-        }
-
+        [Serializable]
         private sealed class ParcelData
         {
             public Vector2Int parcel;

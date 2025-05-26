@@ -12,7 +12,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f3afcc483b22f184c8187c328ac1576f, type: 3}
   m_Name: TerrainData
   m_EditorClassIdentifier: 
+  noiseFunction: {fileID: 11400000, guid: aeb90094fc46a924ababba40d88ea38a, type: 2}
   parcelSize: 16
   terrainSize: 4
-  maxHeight: 0
-  treePrefabs: []
+  maxHeight: 4
+  treePrefabs:
+  - prefab: {fileID: 2214953459268991292, guid: 46ba147d6eb053147b59c469dd34425f, type: 3}
+    density: 1
+  - prefab: {fileID: 2187335638020092438, guid: a5880297cd94bc64697d703509a25311, type: 3}
+    density: 1
+  - prefab: {fileID: 757561452486300604, guid: f03a5d1da28bc6e4098274181dec6ed6, type: 3}
+    density: 1
