@@ -169,8 +169,8 @@ namespace Decentraland.Terrain
                 {
                     Vector2Int parcel = new Vector2Int(x - terrainSize / 2, z - terrainSize / 2);
 
-                    Vector4 parcelCenter = new Vector4(parcel.x + parcelLocalCenter.x,
-                        parcelLocalCenter.y, parcel.y + parcelLocalCenter.z, 1f);
+                    Vector4 parcelCenter = new Vector4(parcel.x * parcelSize + parcelLocalCenter.x,
+                        parcelLocalCenter.y, parcel.y * parcelSize + parcelLocalCenter.z, 1f);
 
                     if (Vector4.Dot(clipPlane0, parcelCenter) < -parcelRadius
                         || Vector4.Dot(clipPlane1, parcelCenter) < -parcelRadius
