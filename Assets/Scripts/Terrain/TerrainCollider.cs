@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
+using Object = UnityEngine.Object;
 
 namespace Decentraland.Terrain
 {
@@ -15,6 +16,41 @@ namespace Decentraland.Terrain
 
         private List<ParcelData> freeParcels = new();
         private List<ParcelData> usedParcels = new();
+        private ObjectPool<GameObject>[] treePools;
+
+        private void Awake()
+        {
+            var treePrefabs = terrainData.treePrefabs;
+            treePools = new ObjectPool<GameObject>[treePrefabs.Length];
+
+            for (int i = 0; i < treePrefabs.Length; i++)
+            {
+                GameObject colliderPrefab = treePrefabs[i].collider;
+
+                treePools[i] = new ObjectPool<GameObject>(
+                    () =>
+                    {
+                        GameObject instance = Object.Instantiate(colliderPrefab
+#if UNITY_EDITOR
+                            , transform
+#endif
+                        );
+                        instance.name = colliderPrefab.name;
+                        return instance;
+                    },
+                    go => go.SetActive(true), go => go.SetActive(false), go =>
+                    {
+                        if (go != null)
+                            Object.Destroy(go);
+                    });
+            }
+        }
+
+        private void OnDestroy()
+        {
+            for (int i = 0; i < treePools.Length; i++)
+                treePools[i].Dispose();
+        }
 
         private void Update()
         {
@@ -80,6 +116,16 @@ namespace Decentraland.Terrain
 
                         parcelData.collider.transform.position = new Vector3(
                             parcel.x * parcelSize, 0f, parcel.y * parcelSize);
+
+                        for (int i = 0; i < parcelData.trees.Count; i++)
+                        {
+                            TreeData tree = parcelData.trees[i];
+                            treePools[tree.prefabIndex].Release(tree.instance);
+                        }
+
+                        parcelData.trees.Clear();
+
+                        CreateTrees(parcel, parcelData.trees);
                     }
                 }
                 else
@@ -101,7 +147,12 @@ namespace Decentraland.Terrain
                     parcelData.collider.transform.position = new Vector3(
                         parcel.x * parcelSize, 0f, parcel.y * parcelSize);
 
+                    parcelData.collider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation
+                                                         | MeshColliderCookingOptions.UseFastMidphase;
+
                     parcelData.collider.sharedMesh = parcelData.mesh;
+
+                    CreateTrees(parcel, parcelData.trees);
 
 #if UNITY_EDITOR
                     parcelData.collider.transform.SetParent(transform, true);
@@ -139,6 +190,28 @@ namespace Decentraland.Terrain
                 Debug.DrawLine(d, a, Color.green);
             }
 #endif
+        }
+
+        private void CreateTrees(Vector2Int parcel, List<TreeData> trees)
+        {
+            int parcelSize = terrainData.parcelSize;
+
+            TerrainNoiseFunction noise = terrainData.noiseFunction;
+            Vector3 treePos;
+            treePos.x = noise.RandomRange(parcel.x, parcel.y, parcel.x * parcelSize, (parcel.x + 1) * parcelSize);
+            treePos.z = noise.RandomRange(treePos.x, treePos.x, parcel.y * parcelSize, (parcel.y + 1) * parcelSize);
+            treePos.y = noise.HeightMap(treePos.x, treePos.z);
+            float treeYaw = noise.RandomRange(treePos.x, treePos.z, -180f, 180f);
+            int treeType = (int)noise.RandomRange(treeYaw, treeYaw, 0f, terrainData.treePrefabs.Length);
+
+            TreeData tree = new TreeData()
+            {
+                instance = treePools[treeType].Get(),
+                prefabIndex = treeType
+            };
+
+            tree.instance.transform.SetPositionAndRotation(treePos, Quaternion.Euler(0f, treeYaw, 0f));
+            trees.Add(tree);
         }
 
         private void SetParcelMeshIndicesAndNormals(Mesh mesh)
@@ -225,6 +298,14 @@ namespace Decentraland.Terrain
             public Vector2Int parcel;
             public MeshCollider collider;
             public Mesh mesh;
+            public List<TreeData> trees = new();
+        }
+
+        [Serializable]
+        private struct TreeData
+        {
+            public GameObject instance;
+            public int prefabIndex;
         }
     }
 }
