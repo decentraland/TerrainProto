@@ -1,4 +1,4 @@
-﻿using UnityEditor;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Pool;
 
@@ -11,14 +11,14 @@ namespace Decentraland.Terrain
         {
             base.OnInspectorGUI();
 
-            if (GUILayout.Button("Extract Colliders"))
+            if (GUILayout.Button("Extract Tree Colliders"))
                 ExtractColliders();
         }
 
         private void ExtractColliders()
         {
             var target = this.target as TerrainData;
-            var treePrefabs = target.treePrefabs;
+            var treePrefabs = target.treePrototypes;
 
             for (int i = 0; i < treePrefabs.Length; i++)
             {

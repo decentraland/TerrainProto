@@ -1,4 +1,4 @@
-﻿#ifndef MOUNTAINSMOISE_INCLUDED
+#ifndef MOUNTAINSMOISE_INCLUDED
 #define MOUNTAINSMOISE_INCLUDED
 
 #include "Noise/noise2D.cginc"

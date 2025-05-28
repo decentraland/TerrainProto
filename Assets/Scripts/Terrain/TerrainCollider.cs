@@ -20,7 +20,7 @@ namespace Decentraland.Terrain
 
         private void Awake()
         {
-            var treePrefabs = terrainData.treePrefabs;
+            var treePrefabs = terrainData.treePrototypes;
             treePools = new ObjectPool<GameObject>[treePrefabs.Length];
 
             for (int i = 0; i < treePrefabs.Length; i++)
@@ -202,7 +202,7 @@ namespace Decentraland.Terrain
             treePos.z = noise.RandomRange(treePos.x, treePos.x, parcel.y * parcelSize, (parcel.y + 1) * parcelSize);
             treePos.y = noise.HeightMap(treePos.x, treePos.z);
             float treeYaw = noise.RandomRange(treePos.x, treePos.z, -180f, 180f);
-            int treeType = (int)noise.RandomRange(treeYaw, treeYaw, 0f, terrainData.treePrefabs.Length);
+            int treeType = (int)noise.RandomRange(treeYaw, treeYaw, 0f, terrainData.treePrototypes.Length);
 
             TreeData tree = new TreeData()
             {

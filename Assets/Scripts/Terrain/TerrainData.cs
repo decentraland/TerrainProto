@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Decentraland.Terrain
 {
@@ -11,7 +12,9 @@ namespace Decentraland.Terrain
         public int parcelSize = 16;
         public int terrainSize;
         public float maxHeight;
-        public TreePrefab[] treePrefabs;
+        public float detailDistance;
+        public TreePrototype[] treePrototypes;
+        public DetailPrototype[] detailPrototypes;
 
         public Vector2Int WorldPositionToParcel(Vector3 value)
         {
@@ -34,12 +37,27 @@ namespace Decentraland.Terrain
 
             return new RectInt(min.x, min.y, max.x - min.x + 1, max.y - min.y + 1);
         }
+    }
 
-        [Serializable]
-        public struct TreePrefab
-        {
-            public GameObject source;
-            public GameObject collider;
-        }
+    [Serializable]
+    public struct DetailPrototype
+    {
+        public GameObject source;
+        public DetailScatterMode scatterMode;
+        public int density;
+        public float alignToGround;
+        public float minWidth;
+        public float maxWidth;
+        public float minHeight;
+        public float maxHeight;
+    }
+
+    public enum DetailScatterMode { JitteredGrid }
+
+    [Serializable]
+    public struct TreePrototype
+    {
+        public GameObject source;
+        public GameObject collider;
     }
 }
