@@ -18,7 +18,7 @@ Shader "DCL/MountainLit"
         _terrainScale("Terrain Scale", Float) = 1.0      // Horizontal scale of terrain (e.g., 100.0)
         _terrainHeight("Terrain Height", Float) = 10     // Maximum height displacement (e.g., 50.0)
         _octaves("Octaves", Integer) = 4            // Number of noise octaves (e.g., 6-8)
-        _frequency("Terrain Height", Float) = 0.005        // Base noise frequency (e.g., 0.01-0.1)
+        _frequency("Frequency", Float) = 0.005        // Base noise frequency (e.g., 0.01-0.1)
 
         [HideInInspector] _BumpScale("Scale", Float) = 1.0
         [NoScaleOffset] _BumpMap("Normal Map", 2D) = "bump" {}
