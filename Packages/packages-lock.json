@@ -150,9 +150,26 @@
         "com.unity.modules.imgui": "1.0.0"
       }
     },
+    "decentraland.grassshader": {
+      "version": "git@github.com:decentraland/unity-explorer-packages.git?path=/StylizedGrassShader",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {
+        "com.unity.modules.imageconversion": "1.0.0",
+        "com.unity.modules.particlesystem": "1.0.0",
+        "com.unity.modules.wind": "1.0.0"
+      },
+      "hash": "7615cca64c445962e7b09f52732d78495e77b80d"
+    },
     "com.unity.modules.hierarchycore": {
       "version": "1.0.0",
       "depth": 2,
+      "source": "builtin",
+      "dependencies": {}
+    },
+    "com.unity.modules.imageconversion": {
+      "version": "1.0.0",
+      "depth": 1,
       "source": "builtin",
       "dependencies": {}
     },
@@ -165,6 +182,12 @@
     "com.unity.modules.jsonserialize": {
       "version": "1.0.0",
       "depth": 2,
+      "source": "builtin",
+      "dependencies": {}
+    },
+    "com.unity.modules.particlesystem": {
+      "version": "1.0.0",
+      "depth": 1,
       "source": "builtin",
       "dependencies": {}
     },
@@ -196,6 +219,12 @@
         "com.unity.modules.jsonserialize": "1.0.0",
         "com.unity.modules.hierarchycore": "1.0.0"
       }
+    },
+    "com.unity.modules.wind": {
+      "version": "1.0.0",
+      "depth": 1,
+      "source": "builtin",
+      "dependencies": {}
     }
   }
 }
