@@ -136,22 +136,19 @@ void InitializeBakedGIData(Varyings input, inout InputData inputData)
 //                  Vertex and Fragment functions                            //
 ///////////////////////////////////////////////////////////////////////////////
 
-VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS)
+VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, out float3 heightDerivative)
 {
     VertexPositionInputs input;
     input.positionWS = TransformObjectToWorld(positionOS);
 
-    float3 heightAdjustedPositionOS = input.positionWS.xyz;
-    float3 heightAdjustedNormalOS;
-    const float _scale = 0.02;
-    const float4 _octave0 = float4(-99974.82, -93748.33, 0, 0);
-    const float4 _octave1 = float4(-67502.3, -22190.19, 0, 0);
-    const float4 _octave2 = float4(77881.34, -61863.88, 0, 0);
-    const float _persistence = 0.338;
-    const float _lacunarity = 2.9;
-    const float _multiplyValue = 3;
-    MountainsNoise_float(input.positionWS, _scale, _octave0.xy, _octave1.xy, _octave2.xy,
-    _persistence, _lacunarity, _multiplyValue, input.positionWS, heightAdjustedNormalOS);
+    // Get terrain height and derivatives at this position
+    float4 terrainData = terrain(input.positionWS, _frequency, _octaves);
+    float height = terrainData.x * _terrainHeight;
+    heightDerivative = terrainData.yzw * _terrainHeight;
+
+    // Modify vertex position with terrain height
+    input.positionWS *= _terrainScale;
+    input.positionWS.y += height;
 
     input.positionVS = TransformWorldToView(input.positionWS);
     input.positionCS = TransformWorldToHClip(input.positionWS);
@@ -172,7 +169,8 @@ Varyings LitPassVertexSimple(Attributes input)
     UNITY_TRANSFER_INSTANCE_ID(input, output);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
-    VertexPositionInputs vertexInput = GetVertexPositionInputs_Mountain(input.positionOS.xyz);
+    float3 heightDerivative;
+    VertexPositionInputs vertexInput = GetVertexPositionInputs_Mountain(input.positionOS.xyz, heightDerivative);
     VertexNormalInputs normalInput = GetVertexNormalInputs(input.normalOS, input.tangentOS);
 
 #if defined(_FOG_FRAGMENT)

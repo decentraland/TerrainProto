@@ -13,6 +13,10 @@ CBUFFER_START(UnityPerMaterial)
     half4 _EmissionColor;
     half _Cutoff;
     half _Surface;
+    half _terrainScale;
+    half _terrainHeight;
+    int _octaves;
+    half _frequency;
     UNITY_TEXTURE_STREAMING_DEBUG_VARS;
 CBUFFER_END
 
@@ -23,6 +27,10 @@ UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
     UNITY_DOTS_INSTANCED_PROP(float4, _EmissionColor)
     UNITY_DOTS_INSTANCED_PROP(float , _Cutoff)
     UNITY_DOTS_INSTANCED_PROP(float , _Surface)
+    UNITY_DOTS_INSTANCED_PROP(float , _terrainScale)
+    UNITY_DOTS_INSTANCED_PROP(float , _terrainHeight)
+    UNITY_DOTS_INSTANCED_PROP(int ,   _octaves)
+    UNITY_DOTS_INSTANCED_PROP(float , _frequency)
 UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
 
 static float4 unity_DOTS_Sampled_BaseColor;
@@ -30,6 +38,10 @@ static float4 unity_DOTS_Sampled_SpecColor;
 static float4 unity_DOTS_Sampled_EmissionColor;
 static float  unity_DOTS_Sampled_Cutoff;
 static float  unity_DOTS_Sampled_Surface;
+static float  unity_DOTS_Sampled_terrainScale;
+static float  unity_DOTS_Sampled_terrainHeight;
+static int    unity_DOTS_Sampled_octaves;
+static float  unity_DOTS_Sampled_frequency;
 
 void SetupDOTSSimpleLitMaterialPropertyCaches()
 {
@@ -38,6 +50,10 @@ void SetupDOTSSimpleLitMaterialPropertyCaches()
     unity_DOTS_Sampled_EmissionColor = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4 , _EmissionColor);
     unity_DOTS_Sampled_Cutoff        = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _Cutoff);
     unity_DOTS_Sampled_Surface       = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _Surface);
+    unity_DOTS_Sampled_terrainScale  = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _terrainScale);
+    unity_DOTS_Sampled_terrainHeight = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _terrainHeight);
+    unity_DOTS_Sampled_octaves       = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(int  , _octaves);
+    unity_DOTS_Sampled_frequency     = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _frequency);
 }
 
 #undef UNITY_SETUP_DOTS_MATERIAL_PROPERTY_CACHES
@@ -48,6 +64,10 @@ void SetupDOTSSimpleLitMaterialPropertyCaches()
 #define _EmissionColor      unity_DOTS_Sampled_EmissionColor
 #define _Cutoff             unity_DOTS_Sampled_Cutoff
 #define _Surface            unity_DOTS_Sampled_Surface
+#define _terrainScale       unity_DOTS_Sampled_terrainScale
+#define _terrainHeight      unity_DOTS_Sampled_terrainHeight
+#define _octaves            unity_DOTS_Sampled_octaves
+#define _frequency          unity_DOTS_Sampled_frequency
 
 #endif
 
