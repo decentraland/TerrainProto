@@ -126,8 +126,10 @@ namespace Decentraland.Terrain
         {
             float frequency = 0.005f;
             int octaves = 4;
+            float terrainHeight = 10.0f;
 
-            return terrain(float3(x, 0.0f, z), frequency, octaves).x;
+            float4 terrainData = terrain(float3(x, 0.0f, z), frequency, octaves);
+            return terrainData.x * terrainHeight;
         }
 
         internal static float3 GetNormal(float x, float z)
