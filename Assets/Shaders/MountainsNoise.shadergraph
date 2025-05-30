@@ -347,27 +347,6 @@
             "m_Id": "f71130787c4b4d98aee11a2dceb14950"
         },
         {
-            "m_Id": "2153681e6cc64545ae31ff75d834b102"
-        },
-        {
-            "m_Id": "adac4c6b3e92451fb8c68bb374d746da"
-        },
-        {
-            "m_Id": "8e7fbaca4bbb48b198bd2a4c20605c22"
-        },
-        {
-            "m_Id": "9cae312f92c1422986152c6827b3b83b"
-        },
-        {
-            "m_Id": "d3249deee34f4136bad7b232e70826cc"
-        },
-        {
-            "m_Id": "c994c23b02e7406bb0357c48f8c288ae"
-        },
-        {
-            "m_Id": "9446309fbb8647e99b00f6033a7506d3"
-        },
-        {
             "m_Id": "390e1abf56c84459b643d4398640eca0"
         },
         {
@@ -387,24 +366,9 @@
     },
     "m_SourceType": 0,
     "m_FunctionName": "MountainsNoise",
-    "m_FunctionSource": "be7efe4af07541fdbe7dfb61af2fadd9",
+    "m_FunctionSource": "3e8cfa8282b14c4eac3bbf24c0aaa804",
     "m_FunctionSourceUsePragmas": true,
     "m_FunctionBody": "Enter function body here..."
-}
-
-{
-    "m_SGVersion": 0,
-    "m_Type": "UnityEditor.ShaderGraph.Vector1MaterialSlot",
-    "m_ObjectId": "2153681e6cc64545ae31ff75d834b102",
-    "m_Id": 2,
-    "m_DisplayName": "Scale",
-    "m_SlotType": 0,
-    "m_Hidden": false,
-    "m_ShaderOutputName": "Scale",
-    "m_StageCapability": 3,
-    "m_Value": 0.019999999552965165,
-    "m_DefaultValue": 0.0,
-    "m_Labels": []
 }
 
 {
@@ -988,27 +952,6 @@
 
 {
     "m_SGVersion": 0,
-    "m_Type": "UnityEditor.ShaderGraph.Vector2MaterialSlot",
-    "m_ObjectId": "8e7fbaca4bbb48b198bd2a4c20605c22",
-    "m_Id": 4,
-    "m_DisplayName": "Octave1",
-    "m_SlotType": 0,
-    "m_Hidden": false,
-    "m_ShaderOutputName": "Octave1",
-    "m_StageCapability": 3,
-    "m_Value": {
-        "x": -67502.296875,
-        "y": -22190.189453125
-    },
-    "m_DefaultValue": {
-        "x": 0.0,
-        "y": 0.0
-    },
-    "m_Labels": []
-}
-
-{
-    "m_SGVersion": 0,
     "m_Type": "UnityEditor.ShaderGraph.Texture2DInputMaterialSlot",
     "m_ObjectId": "8fc5e65662df45fea0850d0bb4efe2fb",
     "m_Id": 1,
@@ -1051,21 +994,6 @@
 {
     "m_SGVersion": 0,
     "m_Type": "UnityEditor.ShaderGraph.Vector1MaterialSlot",
-    "m_ObjectId": "9446309fbb8647e99b00f6033a7506d3",
-    "m_Id": 12,
-    "m_DisplayName": "MultiplyValue",
-    "m_SlotType": 0,
-    "m_Hidden": false,
-    "m_ShaderOutputName": "MultiplyValue",
-    "m_StageCapability": 3,
-    "m_Value": 3.0,
-    "m_DefaultValue": 0.0,
-    "m_Labels": []
-}
-
-{
-    "m_SGVersion": 0,
-    "m_Type": "UnityEditor.ShaderGraph.Vector1MaterialSlot",
     "m_ObjectId": "9c720b8c9c0c4d8686c1b78f47d16195",
     "m_Id": 6,
     "m_DisplayName": "B",
@@ -1075,27 +1003,6 @@
     "m_StageCapability": 2,
     "m_Value": 0.0,
     "m_DefaultValue": 0.0,
-    "m_Labels": []
-}
-
-{
-    "m_SGVersion": 0,
-    "m_Type": "UnityEditor.ShaderGraph.Vector2MaterialSlot",
-    "m_ObjectId": "9cae312f92c1422986152c6827b3b83b",
-    "m_Id": 5,
-    "m_DisplayName": "Octave2",
-    "m_SlotType": 0,
-    "m_Hidden": false,
-    "m_ShaderOutputName": "Octave2",
-    "m_StageCapability": 3,
-    "m_Value": {
-        "x": 77881.34375,
-        "y": -61863.87890625
-    },
-    "m_DefaultValue": {
-        "x": 0.0,
-        "y": 0.0
-    },
     "m_Labels": []
 }
 
@@ -1112,27 +1019,6 @@
     "m_Value": {
         "x": 0.0,
         "y": 0.0
-    },
-    "m_DefaultValue": {
-        "x": 0.0,
-        "y": 0.0
-    },
-    "m_Labels": []
-}
-
-{
-    "m_SGVersion": 0,
-    "m_Type": "UnityEditor.ShaderGraph.Vector2MaterialSlot",
-    "m_ObjectId": "adac4c6b3e92451fb8c68bb374d746da",
-    "m_Id": 3,
-    "m_DisplayName": "Octave0",
-    "m_SlotType": 0,
-    "m_Hidden": false,
-    "m_ShaderOutputName": "Octave0",
-    "m_StageCapability": 3,
-    "m_Value": {
-        "x": -99974.8203125,
-        "y": -93748.328125
     },
     "m_DefaultValue": {
         "x": 0.0,
@@ -1203,21 +1089,6 @@
 
 {
     "m_SGVersion": 0,
-    "m_Type": "UnityEditor.ShaderGraph.Vector1MaterialSlot",
-    "m_ObjectId": "c994c23b02e7406bb0357c48f8c288ae",
-    "m_Id": 8,
-    "m_DisplayName": "Lacunarity",
-    "m_SlotType": 0,
-    "m_Hidden": false,
-    "m_ShaderOutputName": "Lacunarity",
-    "m_StageCapability": 3,
-    "m_Value": 2.9000000953674318,
-    "m_DefaultValue": 0.0,
-    "m_Labels": []
-}
-
-{
-    "m_SGVersion": 0,
     "m_Type": "UnityEditor.ShaderGraph.Vector3MaterialSlot",
     "m_ObjectId": "cd367db03179440b94986ad2e2cbfd01",
     "m_Id": 13,
@@ -1261,21 +1132,6 @@
         "z": 0.0,
         "w": 0.0
     }
-}
-
-{
-    "m_SGVersion": 0,
-    "m_Type": "UnityEditor.ShaderGraph.Vector1MaterialSlot",
-    "m_ObjectId": "d3249deee34f4136bad7b232e70826cc",
-    "m_Id": 7,
-    "m_DisplayName": "Persistence",
-    "m_SlotType": 0,
-    "m_Hidden": false,
-    "m_ShaderOutputName": "Persistence",
-    "m_StageCapability": 3,
-    "m_Value": 0.33799999952316286,
-    "m_DefaultValue": 0.0,
-    "m_Labels": []
 }
 
 {

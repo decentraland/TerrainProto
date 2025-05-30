@@ -1,6 +1,8 @@
+using System;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Pool;
+using Object = UnityEngine.Object;
 
 namespace Decentraland.Terrain
 {
@@ -11,20 +13,20 @@ namespace Decentraland.Terrain
         {
             base.OnInspectorGUI();
 
-            if (GUILayout.Button("Extract Tree Colliders"))
-                ExtractColliders();
+            if (GUILayout.Button("Update Prototypes from Sources"))
+                UpdatePrototypes();
         }
 
-        private void ExtractColliders()
+        private void UpdatePrototypes()
         {
-            var target = this.target as TerrainData;
-            var treePrefabs = target.treePrototypes;
+            TerrainData target = this.target as TerrainData;
+            TreePrototype[] treePrototypes = target.treePrototypes;
 
-            for (int i = 0; i < treePrefabs.Length; i++)
+            for (int i = 0; i < treePrototypes.Length; i++)
             {
-                var treePrefab = treePrefabs[i];
-                GameObject instance = Object.Instantiate(treePrefab.source);
-                instance.name = treePrefab.source.name;
+                ref TreePrototype prototype = ref treePrototypes[i];
+                GameObject instance = Object.Instantiate(prototype.source);
+                instance.name = prototype.source.name;
                 bool hasColliders = false;
 
                 using (ListPool<Component>.Get(out var components))
@@ -53,20 +55,43 @@ namespace Decentraland.Terrain
                             }
                         }
 
-                        string colliderAssetPath = treePrefab.collider != null
-                            ? AssetDatabase.GetAssetPath(treePrefab.collider)
+                        string colliderAssetPath = prototype.collider != null
+                            ? AssetDatabase.GetAssetPath(prototype.collider)
                             : $"Assets/{instance.name}.prefab";
 
-                        treePrefab.collider = PrefabUtility.SaveAsPrefabAsset(instance, colliderAssetPath);
+                        prototype.collider = PrefabUtility.SaveAsPrefabAsset(instance, colliderAssetPath);
                     }
                     else
                     {
-                        treePrefab.collider = null;
+                        prototype.collider = null;
                     }
                 }
 
-                treePrefabs[i] = treePrefab;
                 Object.DestroyImmediate(instance);
+
+                LODGroup lodGroup = prototype.source.GetComponent<LODGroup>();
+                prototype.localSize = lodGroup.size;
+                LOD[] lods = lodGroup.GetLODs();
+                Array.Resize(ref prototype.lods, lods.Length);
+
+                for (int j = 0; j < lods.Length; j++)
+                {
+                    LOD lod = lods[j];
+                    Renderer renderer = lod.renderers[0];
+                    ref TreeLOD treeLod = ref prototype.lods[j];
+                    treeLod.minScreenSize = lod.screenRelativeTransitionHeight;
+                    treeLod.mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
+                    treeLod.materials = renderer.sharedMaterials;
+                }
+            }
+
+            DetailPrototype[] detailPrototypes = target.detailPrototypes;
+
+            for (int i = 0; i < detailPrototypes.Length; i++)
+            {
+                ref DetailPrototype prototype = ref detailPrototypes[i];
+                prototype.mesh = prototype.source.GetComponent<MeshFilter>().sharedMesh;
+                prototype.material = prototype.source.GetComponent<Renderer>().sharedMaterial;
             }
 
             EditorUtility.SetDirty(target);

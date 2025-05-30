@@ -1,10 +1,17 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
+using Object = UnityEngine.Object;
 using Random = Unity.Mathematics.Random;
+using static Unity.Mathematics.math;
 
 namespace Decentraland.Terrain
 {
@@ -60,6 +67,16 @@ namespace Decentraland.Terrain
 #endif
                     Object.Destroy(parcelMesh);
             }
+        }
+
+        private void LateUpdate()
+        {
+
+        }
+
+        public JobHandle StartJobs(Camera camera)
+        {
+            return default;
         }
 
         private Mesh CreateParcelMesh()
@@ -166,8 +183,16 @@ namespace Decentraland.Terrain
             var parcelInstances = ListPool<Matrix4x4>.Get();
             var treeInstances = ListPool<List<Matrix4x4>>.Get();
             var detailInstances = ListPool<List<Matrix4x4>>.Get();
+            var treeLodOffsets = ListPool<int>.Get();
+            int treeMeshCount = 0;
 
             for (int i = 0; i < treePrototypes.Length; i++)
+            {
+                treeLodOffsets.Add(treeMeshCount);
+                treeMeshCount += treePrototypes[i].lods.Length;
+            }
+
+            for (int i = 0; i < treeMeshCount; i++)
                 treeInstances.Add(ListPool<Matrix4x4>.Get());
 
             for (int i = 0; i < detailPrototypes.Length; i++)
@@ -202,19 +227,20 @@ namespace Decentraland.Terrain
                     // Tree scattering
 
                     {
-                        TerrainNoiseFunction noise = terrainData.noiseFunction;
+                        terrainData.NextTree(parcel, ref random, out Vector3 position,
+                            out Quaternion rotation, out int prototypeIndex);
 
-                        Vector3 position;
-                        position.x = parcel.x * parcelSize + random.NextFloat(parcelSize);
-                        position.z = parcel.y * parcelSize + random.NextFloat(parcelSize);
-                        position.y = noise.HeightMap(position.x, position.z);
+                        ref TreePrototype prototype = ref treePrototypes[prototypeIndex];
+                        TreeLOD[] lods = prototype.lods;
+                        float screenSize = prototype.localSize / Vector3.Distance(position, cameraPosition);
+                        int lodIndex = 0;
 
-                        float yaw = random.NextFloat(-180f, 180f);
+                        while (lodIndex < lods.Length && lods[lodIndex].minScreenSize > screenSize)
+                            lodIndex++;
 
-                        int type = random.NextInt(treePrototypes.Length);
-
-                        treeInstances[type].Add(Matrix4x4.TRS(position, Quaternion.Euler(0f, yaw, 0f),
-                            Vector3.one));
+                        if (lodIndex < lods.Length)
+                            treeInstances[treeLodOffsets[prototypeIndex] + lodIndex].Add(
+                                Matrix4x4.TRS(position, rotation, Vector3.one));
                     }
 
                     // Detail scattering
@@ -258,39 +284,39 @@ namespace Decentraland.Terrain
 
                 for (int i = 0; i < treePrototypes.Length; i++)
                 {
-                    if (treeInstances[i].Count == 0)
-                        continue;
+                    TreeLOD[] lods = treePrototypes[i].lods;
 
-                    // TODO: Handle LODs
-                    Renderer renderer = treePrototypes[i].source.GetComponent<LODGroup>().GetLODs()[0]
-                        .renderers[0];
-
-                    Mesh mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
-
-                    using (ListPool<Material>.Get(out var materials))
+                    for (int j = 0; j < lods.Length; j++)
                     {
-                        renderer.GetSharedMaterials(materials);
+                        List<Matrix4x4> instances = treeInstances[i * lods.Length + j];
 
-                        for (int j = 0; j < materials.Count; j++)
+                        if (instances.Count == 0)
+                            continue;
+
+                        TreeLOD lod = lods[j];
+
+                        for (int k = 0; k < lod.materials.Length; k++)
                         {
-                            renderParams.material = materials[j];
-                            Graphics.RenderMeshInstanced(in renderParams, mesh, j, treeInstances[i]);
+                            renderParams.material = lod.materials[k];
+                            Graphics.RenderMeshInstanced(in renderParams, lod.mesh, k, instances);
                         }
                     }
                 }
 
                 // Detail rendering
 
+                renderParams.shadowCastingMode = ShadowCastingMode.Off;
+
                 for (int i = 0; i < detailPrototypes.Length; i++)
                 {
-                    if (detailInstances[i].Count == 0)
+                    List<Matrix4x4> instances = detailInstances[i];
+
+                    if (instances.Count == 0)
                         continue;
 
-                    Renderer renderer = detailPrototypes[i].source.GetComponent<Renderer>();
-                    Mesh mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
-                    renderParams.material = renderer.sharedMaterial;
-                    renderParams.shadowCastingMode = renderer.shadowCastingMode;
-                    Graphics.RenderMeshInstanced(in renderParams, mesh, 0, detailInstances[i]);
+                    ref DetailPrototype prototype = ref detailPrototypes[i];
+                    renderParams.material = prototype.material;
+                    Graphics.RenderMeshInstanced(in renderParams, prototype.mesh, 0, instances);
                 }
             }
             finally
@@ -304,6 +330,7 @@ namespace Decentraland.Terrain
                 ListPool<List<Matrix4x4>>.Release(treeInstances);
                 ListPool<List<Matrix4x4>>.Release(detailInstances);
                 ListPool<Matrix4x4>.Release(parcelInstances);
+                ListPool<int>.Release(treeLodOffsets);
             }
 
             Profiler.EndSample();
@@ -314,7 +341,6 @@ namespace Decentraland.Terrain
         {
             int parcelSize = terrainData.parcelSize;
             float invDensity = (float)parcelSize / prototype.density;
-            TerrainNoiseFunction noise = terrainData.noiseFunction;
 
             for (int z = 0; z < prototype.density; z++)
             for (int x = 0; x < prototype.density; x++)
@@ -322,7 +348,7 @@ namespace Decentraland.Terrain
                 Vector3 position;
                 position.x = parcel.x * parcelSize + x * invDensity + random.NextFloat(invDensity);
                 position.z = parcel.y * parcelSize + z * invDensity + random.NextFloat(invDensity);
-                position.y = noise.HeightMap(position.x, position.z);
+                position.y = terrainData.GetHeight(position.x, position.z);
 
                 float yaw = random.NextFloat(-180f, 180f);
 
@@ -332,6 +358,40 @@ namespace Decentraland.Terrain
                 scale.y = random.NextFloat(prototype.minHeight, prototype.maxHeight);
 
                 instances.Add(Matrix4x4.TRS(position, Quaternion.Euler(0f, yaw, 0f), scale));
+            }
+        }
+
+        private struct TheJob : IJobParallelFor
+        {
+            [ReadOnly] private NativeArray<float4> clipPlanes;
+            private int terrainSize;
+            private int parcelSize;
+            private float maxHeight;
+            private NativeList<Matrix4x4>.ParallelWriter parcelInstances;
+
+            public void Execute(int index)
+            {
+                int2 parcel = int2(
+                    index % terrainSize - terrainSize / 2,
+                    index / terrainSize - terrainSize / 2);
+
+                float3 parcelLocalCenter = float3(parcelSize, maxHeight, parcelSize) * 0.5f;
+                float negParcelRadius = -length(parcelLocalCenter);
+
+                float4 parcelCenter = float4(parcel.x * parcelSize + parcelLocalCenter.x,
+                    parcelLocalCenter.y, parcel.y * parcelSize + parcelLocalCenter.z, 1f);
+
+                for (int i = 0; i < clipPlanes.Length; i++)
+                    if (dot(clipPlanes[i], parcelCenter) < negParcelRadius)
+                        return;
+
+                parcelInstances.AddNoResize(Matrix4x4.Translate(
+                    new Vector3(parcel.x * parcelSize, 0f, parcel.y * parcelSize)));
+
+                Random random = new Random(
+                    (uint)((parcel.x + terrainSize / 2) * terrainSize + parcel.y + terrainSize / 2 + 1));
+
+
             }
         }
     }

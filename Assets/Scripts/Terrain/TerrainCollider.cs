@@ -6,7 +6,9 @@ using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
+using UnityEngine.Serialization;
 using Object = UnityEngine.Object;
+using Random = Unity.Mathematics.Random;
 
 namespace Decentraland.Terrain
 {
@@ -83,6 +85,8 @@ namespace Decentraland.Terrain
                 if (usedParcels.Any(i => i.parcel == parcel))
                     continue;
 
+                Random random = terrainData.GetRandom(parcel);
+
                 if (freeParcels.Count > 0)
                 {
                     ParcelData parcelData = null;
@@ -120,12 +124,12 @@ namespace Decentraland.Terrain
                         for (int i = 0; i < parcelData.trees.Count; i++)
                         {
                             TreeData tree = parcelData.trees[i];
-                            treePools[tree.prefabIndex].Release(tree.instance);
+                            treePools[tree.prototypeIndex].Release(tree.instance);
                         }
 
                         parcelData.trees.Clear();
 
-                        CreateTrees(parcel, parcelData.trees);
+                        CreateTrees(parcel, ref random, parcelData.trees);
                     }
                 }
                 else
@@ -152,7 +156,7 @@ namespace Decentraland.Terrain
 
                     parcelData.collider.sharedMesh = parcelData.mesh;
 
-                    CreateTrees(parcel, parcelData.trees);
+                    CreateTrees(parcel, ref random, parcelData.trees);
 
 #if UNITY_EDITOR
                     parcelData.collider.transform.SetParent(transform, true);
@@ -192,25 +196,18 @@ namespace Decentraland.Terrain
 #endif
         }
 
-        private void CreateTrees(Vector2Int parcel, List<TreeData> trees)
+        private void CreateTrees(Vector2Int parcel, ref Random random, List<TreeData> trees)
         {
-            int parcelSize = terrainData.parcelSize;
-
-            TerrainNoiseFunction noise = terrainData.noiseFunction;
-            Vector3 treePos;
-            treePos.x = noise.RandomRange(parcel.x, parcel.y, parcel.x * parcelSize, (parcel.x + 1) * parcelSize);
-            treePos.z = noise.RandomRange(treePos.x, treePos.x, parcel.y * parcelSize, (parcel.y + 1) * parcelSize);
-            treePos.y = noise.HeightMap(treePos.x, treePos.z);
-            float treeYaw = noise.RandomRange(treePos.x, treePos.z, -180f, 180f);
-            int treeType = (int)noise.RandomRange(treeYaw, treeYaw, 0f, terrainData.treePrototypes.Length);
+            terrainData.NextTree(parcel, ref random, out Vector3 position, out Quaternion rotation,
+                out int prototypeIndex);
 
             TreeData tree = new TreeData()
             {
-                instance = treePools[treeType].Get(),
-                prefabIndex = treeType
+                instance = treePools[prototypeIndex].Get(),
+                prototypeIndex = prototypeIndex
             };
 
-            tree.instance.transform.SetPositionAndRotation(treePos, Quaternion.Euler(0f, treeYaw, 0f));
+            tree.instance.transform.SetPositionAndRotation(position, rotation);
             trees.Add(tree);
         }
 
@@ -262,26 +259,25 @@ namespace Decentraland.Terrain
         {
             Profiler.BeginSample(nameof(SetParcelMeshVertices));
             int parcelSize = terrainData.parcelSize;
-            TerrainNoiseFunction noise = terrainData.noiseFunction;
             Vector2 parcelOriginXZ = new Vector2(parcel.x * parcelSize, parcel.y * parcelSize);
 
             using (ListPool<Vector3>.Get(out var vertices))
             {
                 int sideVertexCount = parcelSize + 1;
                 vertices.EnsureCapacity(sideVertexCount * sideVertexCount);
-                Profiler.BeginSample("MountainsNoise_float");
+                Profiler.BeginSample(nameof(terrainData.GetHeight));
 
                 for (int z = 0; z < sideVertexCount; z++)
                 {
                     for (int x = 0; x < sideVertexCount; x++)
                     {
-                        float y = noise.HeightMap(x + parcelOriginXZ.x, z + parcelOriginXZ.y);
+                        float y = terrainData.GetHeight(x + parcelOriginXZ.x, z + parcelOriginXZ.y);
                         vertices.Add(new Vector3(x, y, z));
                     }
                 }
 
                 Profiler.EndSample();
-                Profiler.BeginSample(nameof(Mesh.SetVertices));
+                Profiler.BeginSample(nameof(mesh.SetVertices));
 
                 mesh.SetVertices(vertices, 0, vertices.Count,
                     MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds);
@@ -305,7 +301,7 @@ namespace Decentraland.Terrain
         private struct TreeData
         {
             public GameObject instance;
-            public int prefabIndex;
+            [FormerlySerializedAs("prefabIndex")] public int prototypeIndex;
         }
     }
 }
