@@ -160,6 +160,18 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, out flo
     return input;
 }
 
+VertexNormalInputs GetVertexNormalInputs_Mountain(float3 normalOS, float4 tangentOS)
+{
+    VertexNormalInputs tbn;
+
+    // mikkts space compliant. only normalize when extracting normal at frag.
+    real sign = real(tangentOS.w) * GetOddNegativeScale();
+    tbn.normalWS = TransformObjectToWorldNormal(normalOS);
+    tbn.tangentWS = real3(TransformObjectToWorldDir(tangentOS.xyz));
+    tbn.bitangentWS = real3(cross(tbn.normalWS, float3(tbn.tangentWS))) * sign;
+    return tbn;
+}
+
 // Used in Standard (Simple Lighting) shader
 Varyings LitPassVertexSimple(Attributes input)
 {
@@ -171,7 +183,11 @@ Varyings LitPassVertexSimple(Attributes input)
 
     float3 heightDerivative;
     VertexPositionInputs vertexInput = GetVertexPositionInputs_Mountain(input.positionOS.xyz, heightDerivative);
-    VertexNormalInputs normalInput = GetVertexNormalInputs(input.normalOS, input.tangentOS);
+
+    float3 normalOS = normalize(float3(-heightDerivative.x, 1.0, -heightDerivative.z));
+    float4 tangentOS = float4(normalize(float3(1.0, heightDerivative.x, 0.0)), 1.0);
+    float3 bitangent = normalize(float3(0.0, heightDerivative.z, 1.0));
+    VertexNormalInputs normalInput = GetVertexNormalInputs(normalOS, tangentOS);
 
 #if defined(_FOG_FRAGMENT)
         half fogFactor = 0;
