@@ -3,6 +3,7 @@
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+#include "MountainLit_VertexFunctions.hlsl"
 #if defined(LOD_FADE_CROSSFADE)
     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/LODCrossFade.hlsl"
 #endif
@@ -33,7 +34,10 @@ struct Varyings
 float4 GetShadowPositionHClip(Attributes input)
 {
     float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
-    float3 normalWS = TransformObjectToWorldNormal(input.normalOS);
+    float3 heightDerivative;
+    positionWS = TerrainVertexAdjustment( positionWS, heightDerivative);
+    float3 normalOS = normalize(float3(-heightDerivative.x, 1.0, -heightDerivative.z));
+    float3 normalWS = TransformObjectToWorldNormal(normalOS);
 
 #if _CASTING_PUNCTUAL_LIGHT_SHADOW
     float3 lightDirectionWS = normalize(_LightPosition - positionWS);

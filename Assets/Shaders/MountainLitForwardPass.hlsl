@@ -2,7 +2,7 @@
 #define UNIVERSAL_SIMPLE_LIT_PASS_INCLUDED
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
-#include "Noise/GeoffNoise.cs"
+#include "MountainLit_VertexFunctions.hlsl"
 #if defined(LOD_FADE_CROSSFADE)
     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/LODCrossFade.hlsl"
 #endif
@@ -135,42 +135,6 @@ void InitializeBakedGIData(Varyings input, inout InputData inputData)
 ///////////////////////////////////////////////////////////////////////////////
 //                  Vertex and Fragment functions                            //
 ///////////////////////////////////////////////////////////////////////////////
-
-VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, out float3 heightDerivative)
-{
-    VertexPositionInputs input;
-    input.positionWS = TransformObjectToWorld(positionOS);
-
-    // Get terrain height and derivatives at this position
-    float4 terrainData = terrain(input.positionWS, _frequency, _octaves);
-    float height = terrainData.x * _terrainHeight;
-    heightDerivative = terrainData.yzw * _terrainHeight;
-
-    // Modify vertex position with terrain height
-    input.positionWS *= _terrainScale;
-    input.positionWS.y += height;
-
-    input.positionVS = TransformWorldToView(input.positionWS);
-    input.positionCS = TransformWorldToHClip(input.positionWS);
-
-    float4 ndc = input.positionCS * 0.5f;
-    input.positionNDC.xy = float2(ndc.x, ndc.y * _ProjectionParams.x) + ndc.w;
-    input.positionNDC.zw = input.positionCS.zw;
-
-    return input;
-}
-
-VertexNormalInputs GetVertexNormalInputs_Mountain(float3 normalOS, float4 tangentOS)
-{
-    VertexNormalInputs tbn;
-
-    // mikkts space compliant. only normalize when extracting normal at frag.
-    real sign = real(tangentOS.w) * GetOddNegativeScale();
-    tbn.normalWS = TransformObjectToWorldNormal(normalOS);
-    tbn.tangentWS = real3(TransformObjectToWorldDir(tangentOS.xyz));
-    tbn.bitangentWS = real3(cross(tbn.normalWS, float3(tbn.tangentWS))) * sign;
-    return tbn;
-}
 
 // Used in Standard (Simple Lighting) shader
 Varyings LitPassVertexSimple(Attributes input)
