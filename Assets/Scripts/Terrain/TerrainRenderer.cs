@@ -243,7 +243,10 @@ namespace Decentraland.Terrain
                 detailInstances = detailInstances.AsParallelWriter()
             };
 
-            JobHandle generateParcels = generateParcelsJob.Schedule(terrainSize * terrainSize, 20);
+            int parcelCount = terrainSize * terrainSize;
+
+            JobHandle generateParcels = generateParcelsJob.Schedule(parcelCount,
+                JobUtility.GetBatchSize(parcelCount));
 
             var treeInstanceCounts = new NativeArray<int>(treeMeshCount, Allocator.TempJob);
             var treeTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);

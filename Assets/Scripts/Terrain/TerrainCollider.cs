@@ -7,7 +7,6 @@ using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
-using UnityEngine.Serialization;
 using static Unity.Mathematics.math;
 using Object = UnityEngine.Object;
 using Random = Unity.Mathematics.Random;
