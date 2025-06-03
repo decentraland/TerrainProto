@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.Collections;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using UnityEngine.Serialization;
+using static Unity.Mathematics.math;
 using Object = UnityEngine.Object;
 using Random = Unity.Mathematics.Random;
 
@@ -198,7 +200,8 @@ namespace Decentraland.Terrain
 
         private void CreateTrees(Vector2Int parcel, ref Random random, List<TreeData> trees)
         {
-            terrainData.NextTree(parcel, ref random, out Vector3 position, out Quaternion rotation,
+            TerrainData.NextTree(int2(parcel.x, parcel.y), terrainData.parcelSize,
+                terrainData.treePrototypes.Length, ref random, out float3 position, out float rotationY,
                 out int prototypeIndex);
 
             TreeData tree = new TreeData()
@@ -207,7 +210,9 @@ namespace Decentraland.Terrain
                 prototypeIndex = prototypeIndex
             };
 
-            tree.instance.transform.SetPositionAndRotation(position, rotation);
+            tree.instance.transform.SetPositionAndRotation(position,
+                Quaternion.Euler(0f, rotationY, 0f));
+
             trees.Add(tree);
         }
 
@@ -265,19 +270,19 @@ namespace Decentraland.Terrain
             {
                 int sideVertexCount = parcelSize + 1;
                 vertices.EnsureCapacity(sideVertexCount * sideVertexCount);
-                Profiler.BeginSample(nameof(terrainData.GetHeight));
+                Profiler.BeginSample("GetTerrainHeight");
 
                 for (int z = 0; z < sideVertexCount; z++)
                 {
                     for (int x = 0; x < sideVertexCount; x++)
                     {
-                        float y = terrainData.GetHeight(x + parcelOriginXZ.x, z + parcelOriginXZ.y);
+                        float y = TerrainData.GetHeight(x + parcelOriginXZ.x, z + parcelOriginXZ.y);
                         vertices.Add(new Vector3(x, y, z));
                     }
                 }
 
                 Profiler.EndSample();
-                Profiler.BeginSample(nameof(mesh.SetVertices));
+                Profiler.BeginSample("SetMeshVertices");
 
                 mesh.SetVertices(vertices, 0, vertices.Count,
                     MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds);
@@ -301,7 +306,7 @@ namespace Decentraland.Terrain
         private struct TreeData
         {
             public GameObject instance;
-            [FormerlySerializedAs("prefabIndex")] public int prototypeIndex;
+            public int prototypeIndex;
         }
     }
 }

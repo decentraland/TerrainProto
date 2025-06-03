@@ -15,6 +15,7 @@ MonoBehaviour:
   parcelSize: 16
   terrainSize: 4
   maxHeight: 4
+  seed: 9473297
   detailDistance: 200
   treePrototypes:
   - source: {fileID: 2214953459268991292, guid: 46ba147d6eb053147b59c469dd34425f, type: 3}
@@ -91,9 +92,9 @@ MonoBehaviour:
     scatterMode: 0
     density: 16
     alignToGround: 0
-    minWidth: 1
-    maxWidth: 2
-    minHeight: 1
-    maxHeight: 2
+    minScaleXZ: 1
+    maxScaleXZ: 2
+    minScaleY: 1
+    maxScaleY: 2
     mesh: {fileID: 8666578268043267355, guid: 396ff52ab0b0210408b55a00b0c3cd57, type: 3}
     material: {fileID: 2100000, guid: 1fb265a1eb82642428d82e5c54ad2148, type: 2}
