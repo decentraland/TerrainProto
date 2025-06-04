@@ -17,6 +17,9 @@ CBUFFER_START(UnityPerMaterial)
     half _terrainHeight;
     int _octaves;
     half _frequency;
+    float _sandThreshold;
+    float _sandSoftness;
+    float _sandScale;
     UNITY_TEXTURE_STREAMING_DEBUG_VARS;
 CBUFFER_END
 
@@ -31,6 +34,9 @@ UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
     UNITY_DOTS_INSTANCED_PROP(float , _terrainHeight)
     UNITY_DOTS_INSTANCED_PROP(int ,   _octaves)
     UNITY_DOTS_INSTANCED_PROP(float , _frequency)
+    UNITY_DOTS_INSTANCED_PROP(float, _sandThreshold)
+    UNITY_DOTS_INSTANCED_PROP(float, _sandSoftness)
+    UNITY_DOTS_INSTANCED_PROP(float, _sandScale)
 UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
 
 static float4 unity_DOTS_Sampled_BaseColor;
@@ -42,6 +48,9 @@ static float  unity_DOTS_Sampled_terrainScale;
 static float  unity_DOTS_Sampled_terrainHeight;
 static int    unity_DOTS_Sampled_octaves;
 static float  unity_DOTS_Sampled_frequency;
+static float  unity_DOTS_Sampled_sandThreshold;
+static float  unity_DOTS_Sampled_sandSoftness;
+static float  unity_DOTS_Sampled_sandScale;
 
 void SetupDOTSSimpleLitMaterialPropertyCaches()
 {
@@ -54,6 +63,9 @@ void SetupDOTSSimpleLitMaterialPropertyCaches()
     unity_DOTS_Sampled_terrainHeight = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _terrainHeight);
     unity_DOTS_Sampled_octaves       = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(int  , _octaves);
     unity_DOTS_Sampled_frequency     = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _frequency);
+    unity_DOTS_Sampled_sandThreshold = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _sandThreshold);
+    unity_DOTS_Sampled_sandSoftness = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _sandSoftness);
+    unity_DOTS_Sampled_sandScale = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _sandScale);
 }
 
 #undef UNITY_SETUP_DOTS_MATERIAL_PROPERTY_CACHES
@@ -68,10 +80,14 @@ void SetupDOTSSimpleLitMaterialPropertyCaches()
 #define _terrainHeight      unity_DOTS_Sampled_terrainHeight
 #define _octaves            unity_DOTS_Sampled_octaves
 #define _frequency          unity_DOTS_Sampled_frequency
+#define _sandThreshold      unity_DOTS_Sampled_sandThreshold
+#define _sandSoftness       unity_DOTS_Sampled_sandSoftness
+#define _sandScale          unity_DOTS_Sampled_sandScale
 
 #endif
 
 TEXTURE2D(_SpecGlossMap);       SAMPLER(sampler_SpecGlossMap);
+TEXTURE2D(_BlendMap);           SAMPLER(sampler_BlendMap);
 
 half4 SampleSpecularSmoothness(float2 uv, half alpha, half4 specColor, TEXTURE2D_PARAM(specMap, sampler_specMap))
 {

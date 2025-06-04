@@ -147,22 +147,94 @@ namespace Decentraland.Terrain
             return float4(height, derivative);
         }
 
+        ///////////////////////////
+        ///////////////////////////
+        ///////////////////////////
+
+        // Optimised hash function: 3 ALU
+        private static float hash_optimised(float2 p)
+        {
+            return frac(sin(dot(p, float2(127.1f, 311.7f))) * 43758.5453f);
+        }
+
+        // Optimised 2D noise: ~25 ALU
+        private static float noise2d_optimised(float2 p)
+        {
+            float2 i = floor(p);
+            float2 f = frac(p);
+
+            float a = hash_optimised(i);
+            float b = hash_optimised(i + float2(1.0f,0.0f));
+            float c = hash_optimised(i + float2(0.0f,1.0f));
+            float d = hash_optimised(i + float2(1.0f,1.0f));
+
+            float2 u = f * f * (3.0f - 2.0f * f); // smoothstep
+            return lerp(lerp(a,b,u.x), lerp(c,d,u.x), u.y);
+        }
+
+        // Optimised terrain with 2 octaves: ~60 ALU total
+        private static float terrain_optimised(float2 pos, float frequency)
+        {
+            float2 p = pos * frequency;
+            float height = 0.0f;
+            float amp = 0.5f;
+            float freq = 1.0f;
+
+            // Octave 1
+            height += noise2d_optimised(p * freq) * amp;
+            amp *= 0.5f; freq *= 2.0f;
+
+            // Octave 2
+            height += noise2d_optimised(p * freq) * amp;
+
+            return height;
+        }
+
+        // Fast normal calculation using finite differences: ~190 ALU
+        private static float3 getNormal_optimised(float2 worldPos, float frequency, int quality)
+        {
+            float eps = 0.1f / frequency; // Scale epsilon with frequency
+
+            float h_center = terrain_optimised(worldPos, frequency);
+            float h_right = terrain_optimised(worldPos + float2(eps, 0.0f), frequency);
+            float h_up = terrain_optimised(worldPos + float2(0.0f, eps), frequency);
+
+            float dhdx = (h_right - h_center) / eps;
+            float dhdy = (h_up - h_center) / eps;
+
+            return normalize(float3(-dhdx, 1.0f, -dhdy));
+        }
+
+        // Optimised version - 60 ALU
+        private static float getHeight_optimised(float2 worldPos, float frequency)
+        {
+            return terrain_optimised(worldPos, frequency);
+        }
+
+        // With normals - varies by quality
+        private static float4 getHeightAndNormal(float2 worldPos, float frequency, int quality)
+        {
+            return float4(getHeight_optimised(worldPos, frequency), getNormal_optimised(worldPos, frequency, 0));
+        }
+
         internal static float GetHeight(float x, float z)
         {
-            float frequency = 0.03f;
-            int octaves = 5;
-            float terrainHeight = -5.0f;
+            float frequencyCS = 0.15f;
+            //int octaves = 5;
+            float terrainHeight = 4.0f;
 
-            float4 terrainData = terrain(float3(x, 0.0f, z), frequency, octaves);
-            return terrainData.x * terrainHeight;
+            float terrainData = getHeight_optimised(float2(x, z), frequencyCS);
+            //float4 terrainData = terrain(float3(x, 0.0f, z), frequency, octaves);
+            return terrainData * terrainHeight;
         }
 
         internal static float3 GetNormal(float x, float z)
         {
-            float frequency = 0.03f;
-            int octaves = 5;
+            float frequencyCS = 0.15f;
+            //int octaves = 5;
 
-            return terrain(float3(x, 0.0f, z), frequency, octaves).yzw;
+            return getNormal_optimised(float2(x, z), frequencyCS, 0);
+            //return terrain(float3(x, 0.0f, z), frequency, octaves).yzw;
         }
 
 #if !SHADER_TARGET

@@ -2,27 +2,30 @@
 #define MOUNTAIN_LIT_VERTEX_FUNCTIONS_INCLUDED
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
-#include "Noise/GeoffNoise.cs"
+//#include "Noise/GeoffNoise.cs"
+#include "PerlinNoise.hlsl"
 
-float3 TerrainVertexAdjustment(float3 positionWS, out float3 heightDerivative)
+float3 TerrainVertexAdjustment(float3 positionWS, out float4 heightDerivative)
 {
-    // Get terrain height and derivatives at this position
-    float4 terrainData = terrain(positionWS, _frequency, _octaves);
-    float height = terrainData.x * _terrainHeight;
-    heightDerivative = terrainData.yzw * _terrainHeight;
+    // // Get terrain height and derivatives at this position
+    // float4 terrainData = terrain(positionWS, _frequency, _octaves);
+    // float height = terrainData.x * _terrainHeight;
+    // heightDerivative = float4(terrainData.yzw * _terrainHeight, height);
+    //
+    // // Modify vertex position with terrain height
+    // positionWS *= _terrainScale;
+    // positionWS.y += height;
 
-    // Modify vertex position with terrain height
-    positionWS *= _terrainScale;
-    positionWS.y += height;
-
+    heightDerivative = float4(0,0,0,0);
     return positionWS;
 }
 
-VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, out float3 heightDerivative)
+VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, out float4 heightDerivative)
 {
     VertexPositionInputs input;
     input.positionWS = TransformObjectToWorld(positionOS);
-    input.positionWS = TerrainVertexAdjustment(input.positionWS, heightDerivative);
+    heightDerivative = getHeightAndNormal(input.positionWS.xz, _frequency, 0);
+    input.positionWS.y += heightDerivative.x * _terrainHeight;
     input.positionVS = TransformWorldToView(input.positionWS);
     input.positionCS = TransformWorldToHClip(input.positionWS);
 

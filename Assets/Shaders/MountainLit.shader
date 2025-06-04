@@ -20,6 +20,11 @@ Shader "DCL/MountainLit"
         _octaves("Octaves", Integer) = 4            // Number of noise octaves (e.g., 6-8)
         _frequency("Frequency", Float) = 0.005        // Base noise frequency (e.g., 0.01-0.1)
 
+        _BlendMap("Blend Map", 2D) = "white" {}
+        _sandThreshold("Sand Threshold", Float) = 0.3 // Sand appears where noise > this value (e.g., 0.3)
+        _sandSoftness("Sand Softness", Float) = 0.2 // Softness of sand edges (e.g., 0.2)
+        _sandScale("Sand Scale", Float) = 10.0 // Scale for sand texture sampling (e.g., 10.0)
+
         [HideInInspector] _BumpScale("Scale", Float) = 1.0
         [NoScaleOffset] _BumpMap("Normal Map", 2D) = "bump" {}
 
@@ -92,7 +97,8 @@ Shader "DCL/MountainLit"
             AlphaToMask[_AlphaToMask]
 
             HLSLPROGRAM
-            #pragma target 2.0
+            #pragma target 5.0
+            #pragma enable_d3d11_debug_symbols
 
             // -------------------------------------
             // Shader Stages
@@ -172,7 +178,7 @@ Shader "DCL/MountainLit"
             Cull[_Cull]
 
             HLSLPROGRAM
-            #pragma target 2.0
+            #pragma target 5.0
 
             // -------------------------------------
             // Shader Stages
@@ -218,7 +224,7 @@ Shader "DCL/MountainLit"
             Cull[_Cull]
 
             HLSLPROGRAM
-            #pragma target 2.0
+            #pragma target 5.0
 
             // -------------------------------------
             // Shader Stages
@@ -261,7 +267,7 @@ Shader "DCL/MountainLit"
             Cull[_Cull]
 
             HLSLPROGRAM
-            #pragma target 2.0
+            #pragma target 5.0
 
             // -------------------------------------
             // Shader Stages

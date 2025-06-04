@@ -52,6 +52,8 @@ struct Varyings
     float4 probeOcclusion : TEXCOORD9;
 #endif
 
+    float4 heightDerivatives :TEXCOORD10;
+
     float4 positionCS                  : SV_POSITION;
     UNITY_VERTEX_INPUT_INSTANCE_ID
     UNITY_VERTEX_OUTPUT_STEREO
@@ -145,12 +147,12 @@ Varyings LitPassVertexSimple(Attributes input)
     UNITY_TRANSFER_INSTANCE_ID(input, output);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
-    float3 heightDerivative;
-    VertexPositionInputs vertexInput = GetVertexPositionInputs_Mountain(input.positionOS.xyz, heightDerivative);
+    output.heightDerivatives;
+    VertexPositionInputs vertexInput = GetVertexPositionInputs_Mountain(input.positionOS.xyz, output.heightDerivatives);
 
-    float3 normalOS = normalize(float3(-heightDerivative.x, 1.0, -heightDerivative.z));
-    float4 tangentOS = float4(normalize(float3(1.0, heightDerivative.x, 0.0)), 1.0);
-    float3 bitangent = normalize(float3(0.0, heightDerivative.z, 1.0));
+    float3 normalOS = normalize(float3(output.heightDerivatives.y, 1.0, output.heightDerivatives.w));
+    float4 tangentOS = float4(normalize(float3(1.0, output.heightDerivatives.y, 0.0)), 1.0);
+    float3 bitangent = normalize(float3(0.0, output.heightDerivatives.w, 1.0));
     VertexNormalInputs normalInput = GetVertexNormalInputs(normalOS, tangentOS);
 
 #if defined(_FOG_FRAGMENT)
@@ -220,6 +222,36 @@ void LitPassFragmentSimple(
 #endif
 
     InitializeBakedGIData(input, inputData);
+
+    // float rawNoise = input.heightDerivatives.w;
+    // float sandNoise2 = sin(rawNoise * 3.14159f * 4.0f) * 0.5f + 0.5f;  // Higher frequency pattern
+    //
+    // float slopeSteepness = length(input.heightDerivatives.xyz);
+    //
+    // // STRATEGY A: Sand in specific noise value ranges
+    // float sandMask1 = smoothstep(_sandThreshold - _sandSoftness, _sandThreshold + _sandSoftness, sandNoise2);
+    //
+    // // STRATEGY B: Sand based on slope (avoid steep areas)
+    // float slopeBasedSand = 1.0f - smoothstep(0.1f, 0.3f, slopeSteepness);
+    //
+    // // STRATEGY C: Sand in "pockets" - areas where noise oscillates
+    // float pocketSand = smoothstep(0.2f, 0.4f, abs(sin(rawNoise * 6.28f)));
+    //
+    // // STRATEGY D: Combine multiple approaches
+    // float combinedSandMask = sandMask1 * slopeBasedSand * pocketSand;
+    //
+    // // Choose which strategy to use (or blend them)
+    // float sandAmount = combinedSandMask;
+    //
+    // // Calculate texture coordinates
+    // float2 texCoord = input.uv * _sandScale;
+    //
+    // // Sample textures
+    // //float4 groundColor = groundTexture.Sample(textureSampler, texCoord);
+    // float4 sandColor = SAMPLE_TEXTURE2D(_BlendMap, sampler_BlendMap, texCoord * 1.5f); // Different scale for sand
+    //
+    // // Blend between ground and sand based on sand mask
+    // surfaceData.albedo.rgb = lerp(surfaceData.albedo.rgb, sandColor.rgb, sandAmount);
 
     half4 color = UniversalFragmentBlinnPhong(inputData, surfaceData);
     color.rgb = MixFog(color.rgb, inputData.fogCoord);
