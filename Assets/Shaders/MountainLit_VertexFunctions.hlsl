@@ -2,8 +2,8 @@
 #define MOUNTAIN_LIT_VERTEX_FUNCTIONS_INCLUDED
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
-//#include "Noise/GeoffNoise.cs"
-#include "PerlinNoise.hlsl"
+#include "Noise/GeoffNoise.cs"
+//#include "PerlinNoise.hlsl"
 
 float3 TerrainVertexAdjustment(float3 positionWS, out float4 heightDerivative)
 {
@@ -24,7 +24,7 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, out flo
 {
     VertexPositionInputs input;
     input.positionWS = TransformObjectToWorld(positionOS);
-    heightDerivative = getHeightAndNormal(input.positionWS.xz, _frequency, 0);
+    heightDerivative = getHeightAndNormal_int(input.positionWS.xz, _frequency, 0);
     input.positionWS.y += heightDerivative.x * _terrainHeight;
     input.positionVS = TransformWorldToView(input.positionWS);
     input.positionCS = TransformWorldToHClip(input.positionWS);

@@ -191,11 +191,11 @@ Material:
     - _Surface: 0
     - _WorkflowMode: 1
     - _ZWrite: 1
-    - _frequency: 0.15
+    - _frequency: 0.21
     - _sandScale: 10
     - _sandSoftness: 0.2
     - _sandThreshold: 0.95
-    - _terrainHeight: 4
+    - _terrainHeight: 3
     - _terrainScale: 0.24
     m_Colors:
     - _BaseColor: {r: 0.8113208, g: 0.2028302, b: 0.2028302, a: 1}
