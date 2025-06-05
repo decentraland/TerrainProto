@@ -1,8 +1,8 @@
 using System;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.Serialization;
 using static Unity.Mathematics.math;
+using float3 = Unity.Mathematics.float3;
 using Random = Unity.Mathematics.Random;
 
 namespace Decentraland.Terrain
@@ -16,7 +16,7 @@ namespace Decentraland.Terrain
         public int terrainSize;
         public float maxHeight;
         public int seed = 1;
-        public float detailDistance;
+        [Range(0f, 1f)] public float treeDensity;
         public TreePrototype[] treePrototypes;
         public DetailPrototype[] detailPrototypes;
 
@@ -54,18 +54,30 @@ namespace Decentraland.Terrain
             }
 
             int halfTerrainSize = terrainSize / 2;
+
             return new Random(lowbias32((uint)(
                 (parcel.y + halfTerrainSize) * terrainSize + parcel.x + halfTerrainSize + seed)));
         }
 
-        public static void NextTree(int2 parcel, int parcelSize, int treePrototypeCount,
-            ref Random random, out float3 position, out float rotationY, out int prototypeIndex)
+        public static bool NextTree(int2 parcel, int parcelSize, float treeDensity,
+            int treePrototypeCount, ref Random random, out float3 position, out float rotationY,
+            out int prototypeIndex)
         {
+            if (random.NextFloat() > treeDensity)
+            {
+                position = float3.zero;
+                rotationY = 0f;
+                prototypeIndex = 0;
+                return false;
+            }
+
             position.x = parcel.x * parcelSize + random.NextFloat(parcelSize);
             position.z = parcel.y * parcelSize + random.NextFloat(parcelSize);
             position.y = GetHeight(position.x, position.z);
             rotationY = random.NextFloat(-180f, 180f);
             prototypeIndex = random.NextInt(treePrototypeCount);
+
+            return true;
         }
 
         public Vector2Int WorldPositionToParcel(Vector3 value)

@@ -199,9 +199,12 @@ namespace Decentraland.Terrain
 
         private void CreateTrees(Vector2Int parcel, ref Random random, List<TreeData> trees)
         {
-            TerrainData.NextTree(int2(parcel.x, parcel.y), terrainData.parcelSize,
-                terrainData.treePrototypes.Length, ref random, out float3 position, out float rotationY,
-                out int prototypeIndex);
+            if (!TerrainData.NextTree(int2(parcel.x, parcel.y), terrainData.parcelSize,
+                    terrainData.treeDensity, terrainData.treePrototypes.Length, ref random,
+                    out float3 position, out float rotationY, out int prototypeIndex))
+            {
+                return;
+            }
 
             TreeData tree = new TreeData()
             {

@@ -3,45 +3,69 @@ using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Mathematics.Geometry;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using static Unity.Mathematics.math;
 using Object = UnityEngine.Object;
+using Plane = Unity.Mathematics.Geometry.Plane;
 using Random = Unity.Mathematics.Random;
 
 namespace Decentraland.Terrain
 {
-    [ExecuteAlways]
+    //[ExecuteAlways]
     public sealed class TerrainRenderer : MonoBehaviour
     {
         [SerializeField] private TerrainData terrainData;
         [SerializeField] private Material material;
+        [SerializeField] private float detailDistance = 200;
+        [SerializeField] private int groundInstanceCapacity = 64;
+        [SerializeField] private int treeInstanceCapacity = 8192;
+        [SerializeField] private int detailInstanceCapacity = 8192;
 
-        private Mesh parcelMesh;
         private Bounds bounds;
+        private Mesh groundMesh;
+        private NativeArray<int2> magicPattern;
+
+        private readonly Vector3[] clipCorners =
+        {
+            new(-1f, -1f, 0f), new(-1f, -1f, 1f),
+            new(-1f, 1f, 0f), new(-1f, 1f, 1f), new(1f, -1f, 0f), new(1f, -1f, 1f), new(1f, 1f, 0f),
+            new(1f, 1f, 1f)
+        };
 
 #if UNITY_EDITOR
-        public Mesh ParcelMesh => parcelMesh;
+        public int DetailInstanceCount { get; private set; }
+        public int GroundInstanceCount { get; private set; }
+        public Mesh GroundMesh => groundMesh;
+        public int TreeInstanceCount { get; private set; }
 #endif
 
         private void OnValidate()
         {
 #if UNITY_EDITOR
-            if (parcelMesh != null)
+            if (groundMesh != null)
             {
                 if (!Application.isPlaying)
-                    Object.DestroyImmediate(parcelMesh);
+                    Object.DestroyImmediate(groundMesh);
                 else
-                    Object.Destroy(parcelMesh);
+                    Object.Destroy(groundMesh);
             }
 #endif
 
             if (terrainData == null)
                 return;
 
-            parcelMesh = CreateParcelMesh();
+            int halfSideLength = terrainData.parcelSize * terrainData.terrainSize / 2;
+            Vector3 center = new Vector3(0f, terrainData.maxHeight * 0.5f, 0f);
+            bounds = new Bounds(center, new Vector3(halfSideLength, center.y, halfSideLength));
+
+            groundMesh = CreateGroundMesh(terrainData.parcelSize);
+
+            if (!magicPattern.IsCreated)
+                magicPattern = CreateMagicPattern();
         }
 
         private void OnEnable()
@@ -56,26 +80,28 @@ namespace Decentraland.Terrain
 
         private void OnDestroy()
         {
-            if (parcelMesh != null)
+            if (magicPattern.IsCreated)
+                magicPattern.Dispose();
+
+            if (groundMesh != null)
             {
 #if UNITY_EDITOR
                 if (!Application.isPlaying)
-                    Object.DestroyImmediate(parcelMesh);
+                    Object.DestroyImmediate(groundMesh);
                 else
 #endif
-                    Object.Destroy(parcelMesh);
+                    Object.Destroy(groundMesh);
             }
         }
 
-        private Mesh CreateParcelMesh()
+        private static Mesh CreateGroundMesh(int parcelSize)
         {
             var parcelMesh = new Mesh()
             {
-                name = "Parcel Render Mesh",
+                name = "Terrain Render Mesh",
                 hideFlags = HideFlags.DontSave
             };
 
-            int parcelSize = terrainData.parcelSize;
             int sideVertexCount = parcelSize + 1;
             var vertices = new Vector3[sideVertexCount * sideVertexCount];
 
@@ -116,6 +142,49 @@ namespace Decentraland.Terrain
             return parcelMesh;
         }
 
+        private static NativeArray<int2> CreateMagicPattern()
+        {
+            var magicPattern = new NativeArray<int2>(16, Allocator.Persistent,
+                NativeArrayOptions.UninitializedMemory);
+
+            magicPattern[0] = int2(0, 0);
+            magicPattern[1] = int2(-1, 0);
+            magicPattern[2] = int2(-1, -1);
+            magicPattern[3] = int2(0, -1);
+            magicPattern[4] = int2(1, 1);
+            magicPattern[5] = int2(0, 1);
+            magicPattern[6] = int2(-1, 1);
+            magicPattern[7] = int2(-2, 1);
+            magicPattern[8] = int2(-2, 0);
+            magicPattern[9] = int2(-2, -1);
+            magicPattern[10] = int2(-2, -2);
+            magicPattern[11] = int2(-1, -2);
+            magicPattern[12] = int2(0, -2);
+            magicPattern[13] = int2(1, -2);
+            magicPattern[14] = int2(1, -1);
+            magicPattern[15] = int2(1, 0);
+
+            return magicPattern;
+        }
+
+        private static bool OverlapsClipVolume(MinMaxAABB bounds, MinMaxAABB clipBounds,
+            NativeArray<ClipPlane> clipPlanes)
+        {
+            if (!bounds.Overlaps(clipBounds))
+                return false;
+
+            for (int i = 0; i < clipPlanes.Length; i++)
+            {
+                ClipPlane clipPlane = clipPlanes[i];
+                float3 farCorner = bounds.GetCorner(clipPlane.farCornerIndex);
+
+                if (clipPlane.plane.SignedDistanceToPoint(farCorner) < 0f)
+                    return false;
+            }
+
+            return true;
+        }
+
         private void Render(ScriptableRenderContext context, List<Camera> cameras)
         {
             if (terrainData == null)
@@ -138,14 +207,14 @@ namespace Decentraland.Terrain
             if (camera == null)
                 return;
 
-            Profiler.BeginSample("RenderTerrain");
+            float3 cameraPosition = camera.transform.position;
+
+            if (cameraPosition.y < 0f)
+                return;
 
             int parcelSize = terrainData.parcelSize;
-            int terrainSize = terrainData.terrainSize;
-            float maxHeight = terrainData.maxHeight;
 
-            // Deallocated by GenerateParcelsJob
-            NativeArray<float4> clipPlanes = new NativeArray<float4>(6, Allocator.TempJob,
+            var clipPlanes = new NativeArray<ClipPlane>(6, Allocator.TempJob,
                 NativeArrayOptions.UninitializedMemory);
 
             var worldToProjectionMatrix = camera.projectionMatrix * camera.worldToCameraMatrix;
@@ -155,17 +224,45 @@ namespace Decentraland.Terrain
             float4 row2 = worldToProjectionMatrix.GetRow(2);
             float4 row3 = worldToProjectionMatrix.GetRow(3);
 
-            clipPlanes[0] = row3 + row0;
-            clipPlanes[1] = row3 - row0;
-            clipPlanes[2] = row3 + row1;
-            clipPlanes[3] = row3 - row1;
-            clipPlanes[4] = row3 + row2;
-            clipPlanes[5] = row3 - row2;
+            clipPlanes[0] = new ClipPlane(row3 + row0);
+            clipPlanes[1] = new ClipPlane(row3 - row0);
+            clipPlanes[2] = new ClipPlane(row3 + row1);
+            clipPlanes[3] = new ClipPlane(row3 - row1);
+            clipPlanes[4] = new ClipPlane(row3 + row2);
+            clipPlanes[5] = new ClipPlane(row3 - row2);
 
-            for (int i = 0; i < clipPlanes.Length; i++)
-                clipPlanes[i] /= length(clipPlanes[i].xyz);
+            var projectionToWorldMatrix = worldToProjectionMatrix.inverse;
+            float3 clipCorner0 = projectionToWorldMatrix.MultiplyPoint(clipCorners[0]);
+            MinMaxAABB clipBounds = new MinMaxAABB(clipCorner0, clipCorner0);
 
-            // Deallocated by GenerateParcelsJob
+            for (int i = 1; i < clipCorners.Length; i++)
+                clipBounds.Encapsulate(projectionToWorldMatrix.MultiplyPoint(clipCorners[i]));
+
+            if (!OverlapsClipVolume(bounds.ToMinMaxAABB(), clipBounds, clipPlanes))
+            {
+                clipPlanes.Dispose();
+                return;
+            }
+
+            Profiler.BeginSample("RenderTerrain");
+
+            var groundTransforms = new NativeList<Matrix4x4>(groundInstanceCapacity, Allocator.TempJob);
+
+            var generateGroundJob = new GenerateTerrainJob()
+            {
+                parcelSize = parcelSize,
+                terrainSize = terrainData.terrainSize,
+                maxHeight = terrainData.maxHeight,
+                cameraPosition = cameraPosition,
+                clipBounds = clipBounds,
+                clipPlanes = clipPlanes,
+                magicPattern = magicPattern,
+                groundTransforms = groundTransforms
+            };
+
+            JobHandle generateGround = generateGroundJob.Schedule();
+
+            // Deallocated by ScatterObjectsJob
             var treePrototypes = new NativeArray<TreePrototypeData>(terrainData.treePrototypes.Length,
                 Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
@@ -184,7 +281,7 @@ namespace Decentraland.Terrain
                 treeMeshCount += prototype.lods.Length;
             }
 
-            // Deallocated by GenerateParcelsJob
+            // Deallocated by ScatterObjectsJob
             var treeLods = new NativeArray<TreeLODData>(treeMeshCount, Allocator.TempJob,
                 NativeArrayOptions.UninitializedMemory);
 
@@ -202,7 +299,7 @@ namespace Decentraland.Terrain
                 }
             }
 
-            // Deallocated by GenerateParcelsJob
+            // Deallocated by ScatterObjectsJob
             var detailPrototypes = new NativeArray<DetailPrototypeData>(
                 terrainData.detailPrototypes.Length, Allocator.TempJob,
                 NativeArrayOptions.UninitializedMemory);
@@ -222,30 +319,32 @@ namespace Decentraland.Terrain
                 };
             }
 
-            var parcelTransforms = new NativeList<Matrix4x4>(32, Allocator.TempJob);
-            var treeInstances = new NativeList<TreeInstance>(32, Allocator.TempJob);
-            var detailInstances = new NativeList<DetailInstance>(8192, Allocator.TempJob);
+            var treeInstances = new NativeList<TreeInstance>(treeInstanceCapacity, Allocator.TempJob);
 
-            var generateParcelsJob = new GenerateParcelsJob()
+            var detailInstances = new NativeList<DetailInstance>(detailInstanceCapacity,
+                Allocator.TempJob);
+
+            var scatterObjectsJob = new ScatterObjectsJob()
             {
-                terrainSize = terrainSize,
-                parcelSize = parcelSize,
-                maxHeight = maxHeight,
+                parcelSize = terrainData.parcelSize,
+                terrainSize = terrainData.terrainSize,
+                maxHeight = terrainData.maxHeight,
                 seed = terrainData.seed,
-                cameraPosition = camera.transform.position,
-                detailSqrDistance = terrainData.detailDistance * terrainData.detailDistance,
+                detailSqrDistance = detailDistance * detailDistance,
+                cameraPosition = cameraPosition,
+                clipBounds = clipBounds,
                 clipPlanes = clipPlanes,
+                treeDensity = terrainData.treeDensity,
                 treePrototypes = treePrototypes,
                 treeLods = treeLods,
                 detailPrototypes = detailPrototypes,
-                parcelTransforms = parcelTransforms.AsParallelWriter(),
                 treeInstances = treeInstances.AsParallelWriter(),
                 detailInstances = detailInstances.AsParallelWriter()
             };
 
-            int parcelCount = terrainSize * terrainSize;
+            int parcelCount = terrainData.terrainSize * terrainData.terrainSize;
 
-            JobHandle generateParcels = generateParcelsJob.Schedule(parcelCount,
+            JobHandle scatterObjects = scatterObjectsJob.Schedule(parcelCount,
                 JobUtility.GetBatchSize(parcelCount));
 
             var treeInstanceCounts = new NativeArray<int>(treeMeshCount, Allocator.TempJob);
@@ -258,7 +357,7 @@ namespace Decentraland.Terrain
                 transforms = treeTransforms
             };
 
-            JobHandle prepareTreeRenderList = prepareTreeRenderListJob.Schedule(generateParcels);
+            JobHandle prepareTreeRenderList = prepareTreeRenderListJob.Schedule(scatterObjects);
 
             var detailInstanceCounts = new NativeArray<int>(detailPrototypes.Length, Allocator.TempJob);
             var detailTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
@@ -270,36 +369,48 @@ namespace Decentraland.Terrain
                 transforms = detailTransforms
             };
 
-            JobHandle prepareDetailRenderList = prepareDetailRenderListJob.Schedule(generateParcels);
+            JobHandle prepareDetailRenderList = prepareDetailRenderListJob.Schedule(scatterObjects);
 
             var renderParams = new RenderParams()
             {
-#if !UNITY_EDITOR
-                camera = camera,
-#endif
                 instanceID = GetInstanceID(),
                 layer = gameObject.layer,
                 receiveShadows = true,
                 renderingLayerMask = RenderingLayerMask.defaultRenderingLayerMask,
+                worldBounds = bounds,
+#if !UNITY_EDITOR
+                camera = camera,
+#endif
             };
 
-            renderParams.worldBounds = new Bounds(
-                new Vector3(0f, maxHeight * 0.5f, 0f),
-                new Vector3(terrainSize * parcelSize, maxHeight, terrainSize * parcelSize));
+            renderParams.worldBounds = bounds;
 
-            JobHandle.CompleteAll(ref prepareTreeRenderList, ref prepareDetailRenderList);
+            generateGround.Complete();
+            RenderParcels(renderParams, groundTransforms.AsArray());
+#if UNITY_EDITOR
+            GroundInstanceCount = groundTransforms.Length;
+#endif
+            groundTransforms.Dispose();
+
+            scatterObjects.Complete();
+            clipPlanes.Dispose();
+
+            prepareTreeRenderList.Complete();
             treeInstances.Dispose();
-            detailInstances.Dispose();
-
-            RenderParcels(renderParams, parcelTransforms.AsArray());
-            parcelTransforms.Dispose();
-
             RenderTrees(renderParams, treeTransforms.AsArray(), treeInstanceCounts);
             treeInstanceCounts.Dispose();
+#if UNITY_EDITOR
+            TreeInstanceCount = treeTransforms.Length;
+#endif
             treeTransforms.Dispose();
 
+            prepareDetailRenderList.Complete();
+            detailInstances.Dispose();
             RenderDetails(renderParams, detailTransforms.AsArray(), detailInstanceCounts);
             detailInstanceCounts.Dispose();
+#if UNITY_EDITOR
+            DetailInstanceCount = detailTransforms.Length;
+#endif
             detailTransforms.Dispose();
 
             Profiler.EndSample();
@@ -341,7 +452,7 @@ namespace Decentraland.Terrain
             renderParams.material = material;
             renderParams.shadowCastingMode = ShadowCastingMode.On;
 
-            Graphics.RenderMeshInstanced(renderParams, parcelMesh, 0, instanceData);
+            Graphics.RenderMeshInstanced(renderParams, groundMesh, 0, instanceData);
         }
 
         private void RenderTrees(RenderParams renderParams, NativeArray<Matrix4x4> instanceData,
@@ -384,118 +495,58 @@ namespace Decentraland.Terrain
             }
         }
 
-        private struct GenerateParcelsJob : IJobParallelFor
+        private struct GenerateTerrainJob : IJob
         {
-            public int terrainSize;
             public int parcelSize;
+            public int terrainSize;
             public float maxHeight;
-            public int seed;
             public float3 cameraPosition;
-            public float detailSqrDistance;
-            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<float4> clipPlanes;
-            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreePrototypeData> treePrototypes;
-            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreeLODData> treeLods;
-            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<DetailPrototypeData> detailPrototypes;
-            public NativeList<Matrix4x4>.ParallelWriter parcelTransforms;
-            public NativeList<TreeInstance>.ParallelWriter treeInstances;
-            public NativeList<DetailInstance>.ParallelWriter detailInstances;
+            public MinMaxAABB clipBounds;
+            [ReadOnly] public NativeArray<ClipPlane> clipPlanes;
+            [ReadOnly] public NativeArray<int2> magicPattern;
+            public NativeList<Matrix4x4> groundTransforms;
 
-            public void Execute(int index)
+            public void Execute()
             {
-                int2 parcel = int2(
-                    index % terrainSize - terrainSize / 2,
-                    index / terrainSize - terrainSize / 2);
+                int2 origin = (PositionToParcel(cameraPosition) + 1) & ~1;
+                int scale = (int)(cameraPosition.y / parcelSize) + 1;
 
-                float3 parcelLocalCenter = float3(parcelSize, maxHeight, parcelSize) * 0.5f;
-                float negParcelRadius = -length(parcelLocalCenter);
+                for (int i = 0; i < 4; i++)
+                    TryGenerateParcel(origin, magicPattern[i], scale);
 
-                float4 parcelCenter = float4(parcel.x * parcelSize + parcelLocalCenter.x,
-                    parcelLocalCenter.y, parcel.y * parcelSize + parcelLocalCenter.z, 1f);
-
-                for (int i = 0; i < clipPlanes.Length; i++)
-                    if (dot(clipPlanes[i], parcelCenter) < negParcelRadius)
-                        return;
-
-                parcelTransforms.AddNoResize(Matrix4x4.Translate(
-                    new Vector3(parcel.x * parcelSize, 0f, parcel.y * parcelSize)));
-
-                Random random = TerrainData.GetRandom(parcel, terrainSize, seed);
-
-                // Tree scattering
-
+                while (true)
                 {
-                    TerrainData.NextTree(parcel, parcelSize, treePrototypes.Length, ref random,
-                        out float3 position, out float rotationY, out int prototypeIndex);
+                    bool outOfBounds = true;
 
-                    TreePrototypeData prototype = treePrototypes[prototypeIndex];
-                    float screenSize = prototype.localSize / distance(position, cameraPosition);
-                    int meshIndex = prototype.lod0MeshIndex;
+                    for (int i = 4; i < 16; i++)
+                        if (TryGenerateParcel(origin, magicPattern[i], scale))
+                            outOfBounds = false;
 
-                    int meshEnd = prototypeIndex + 1 < treePrototypes.Length
-                        ? treePrototypes[prototypeIndex + 1].lod0MeshIndex
-                        : treeLods.Length;
+                    if (outOfBounds)
+                        break;
 
-                    while (meshIndex < meshEnd && treeLods[meshIndex].minScreenSize > screenSize)
-                        meshIndex++;
-
-                    if (meshIndex < meshEnd)
-                    {
-                        treeInstances.AddNoResize(new TreeInstance()
-                        {
-                            meshIndex = meshIndex,
-                            position = position,
-                            rotationY = rotationY
-                        });
-                    }
-                }
-
-                // Detail scattering
-
-                if (distancesq(parcelCenter.xyz, cameraPosition) < detailSqrDistance)
-                {
-                    for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
-                    {
-                        DetailPrototypeData prototype = detailPrototypes[prototypeIndex];
-
-                        switch (prototype.scatterMode)
-                        {
-                            case DetailScatterMode.JitteredGrid:
-                                JitteredGrid(parcel, prototype, prototypeIndex, ref random,
-                                    detailInstances);
-
-                                break;
-                        }
-                    }
+                    scale *= 2;
                 }
             }
 
-            private void JitteredGrid(int2 parcel, DetailPrototypeData prototype, int meshIndex,
-                ref Random random, NativeList<DetailInstance>.ParallelWriter instances)
+            private int2 PositionToParcel(float3 value)
             {
-                float invDensity = (float)parcelSize / prototype.density;
+                return (int2)round(value.xz * (1f / parcelSize) - 0.5f);
+            }
 
-                for (int z = 0; z < prototype.density; z++)
-                for (int x = 0; x < prototype.density; x++)
-                {
-                    Vector3 position;
-                    position.x = parcel.x * parcelSize + x * invDensity + random.NextFloat(invDensity);
-                    position.z = parcel.y * parcelSize + z * invDensity + random.NextFloat(invDensity);
-                    position.y = TerrainData.GetHeight(position.x, position.z);
+            private bool TryGenerateParcel(int2 origin, int2 parcel, int scale)
+            {
+                int2 min = (origin + parcel * scale) * parcelSize;
+                int2 max = min + scale * parcelSize;
+                var bounds = new MinMaxAABB(float3(min.x, 0f, min.y), float3(max.x, maxHeight, max.y));
 
-                    float rotationY = random.NextFloat(-180f, 180f);
+                if (!OverlapsClipVolume(bounds, clipBounds, clipPlanes))
+                    return false;
 
-                    float scaleXZ = random.NextFloat(prototype.minScaleXZ, prototype.maxScaleXZ);
-                    float scaleY = random.NextFloat(prototype.minScaleY, prototype.maxScaleY);
+                groundTransforms.Add(Matrix4x4.TRS(new Vector3(min.x, 0f, min.y), Quaternion.identity,
+                    Vector3.one * scale));
 
-                    instances.AddNoResize(new DetailInstance()
-                    {
-                        meshIndex = meshIndex,
-                        position = position,
-                        rotationY = rotationY,
-                        scaleXZ = scaleXZ,
-                        scaleY = scaleY
-                    });
-                }
+                return true;
             }
         }
 
@@ -570,6 +621,141 @@ namespace Decentraland.Terrain
                 }
 
                 instanceCounts[meshIndex] = instanceCount;
+            }
+        }
+
+        private struct ScatterObjectsJob : IJobParallelFor
+        {
+            public int terrainSize;
+            public int parcelSize;
+            public float maxHeight;
+            public int seed;
+            public float detailSqrDistance;
+            public float3 cameraPosition;
+            public MinMaxAABB clipBounds;
+            [ReadOnly] public NativeArray<ClipPlane> clipPlanes;
+            public float treeDensity;
+            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreePrototypeData> treePrototypes;
+            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreeLODData> treeLods;
+            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<DetailPrototypeData> detailPrototypes;
+            public NativeList<TreeInstance>.ParallelWriter treeInstances;
+            public NativeList<DetailInstance>.ParallelWriter detailInstances;
+
+            public void Execute(int index)
+            {
+                int2 parcel = int2(
+                    index % terrainSize - terrainSize / 2,
+                    index / terrainSize - terrainSize / 2);
+
+                int2 min = parcel * parcelSize;
+                int2 max = min + parcelSize;
+                var bounds = new MinMaxAABB(float3(min.x, 0f, min.y), float3(max.x, maxHeight, max.y));
+
+                if (!OverlapsClipVolume(bounds, clipBounds, clipPlanes))
+                    return;
+
+                Random random = TerrainData.GetRandom(parcel, terrainSize, seed);
+
+                // Tree scattering
+
+                if (TerrainData.NextTree(parcel, parcelSize, treeDensity, treePrototypes.Length,
+                        ref random, out float3 position, out float rotationY, out int prototypeIndex0))
+                {
+                    int prototypeIndex = prototypeIndex0;
+                    TreePrototypeData prototype = treePrototypes[prototypeIndex];
+                    float screenSize = prototype.localSize / distance(position, cameraPosition);
+                    int meshIndex = prototype.lod0MeshIndex;
+
+                    int meshEnd = prototypeIndex + 1 < treePrototypes.Length
+                        ? treePrototypes[prototypeIndex + 1].lod0MeshIndex
+                        : treeLods.Length;
+
+                    while (meshIndex < meshEnd && treeLods[meshIndex].minScreenSize > screenSize)
+                        meshIndex++;
+
+                    if (meshIndex < meshEnd)
+                    {
+                        treeInstances.AddNoResize(new TreeInstance()
+                        {
+                            meshIndex = meshIndex,
+                            position = position,
+                            rotationY = rotationY
+                        });
+                    }
+                }
+
+                // Detail scattering
+
+                if (distancesq(bounds.Center, cameraPosition) < detailSqrDistance)
+                {
+                    for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
+                    {
+                        DetailPrototypeData prototype = detailPrototypes[prototypeIndex];
+
+                        switch (prototype.scatterMode)
+                        {
+                            case DetailScatterMode.JitteredGrid:
+                                JitteredGrid(parcel, prototype, prototypeIndex, ref random,
+                                    detailInstances);
+
+                                break;
+                        }
+                    }
+                }
+            }
+
+            private void JitteredGrid(int2 parcel, DetailPrototypeData prototype, int meshIndex,
+                ref Random random, NativeList<DetailInstance>.ParallelWriter instances)
+            {
+                float invDensity = (float)parcelSize / prototype.density;
+
+                for (int z = 0; z < prototype.density; z++)
+                for (int x = 0; x < prototype.density; x++)
+                {
+                    Vector3 position;
+                    position.x = parcel.x * parcelSize + x * invDensity + random.NextFloat(invDensity);
+                    position.z = parcel.y * parcelSize + z * invDensity + random.NextFloat(invDensity);
+                    position.y = TerrainData.GetHeight(position.x, position.z);
+
+                    float rotationY = random.NextFloat(-180f, 180f);
+
+                    float scaleXZ = random.NextFloat(prototype.minScaleXZ, prototype.maxScaleXZ);
+                    float scaleY = random.NextFloat(prototype.minScaleY, prototype.maxScaleY);
+
+                    instances.AddNoResize(new DetailInstance()
+                    {
+                        meshIndex = meshIndex,
+                        position = position,
+                        rotationY = rotationY,
+                        scaleXZ = scaleXZ,
+                        scaleY = scaleY
+                    });
+                }
+            }
+        }
+
+        private struct ClipPlane
+        {
+            public Plane plane;
+            public int farCornerIndex;
+
+            public ClipPlane(float4 coefficients)
+            {
+                plane = new Plane() { NormalAndDistance = Plane.Normalize(coefficients) };
+                if (plane.NormalAndDistance.x < 0f)
+                {
+                    if (plane.NormalAndDistance.y < 0f)
+                        farCornerIndex = plane.NormalAndDistance.z < 0f ? 0b000 : 0b001;
+                    else
+                        farCornerIndex = plane.NormalAndDistance.z < 0f ? 0b010 : 0b011;
+                }
+                else
+                {
+                    if (plane.NormalAndDistance.y < 0f)
+                        farCornerIndex = plane.NormalAndDistance.z < 0f ? 0b100 : 0b101;
+                    else
+                        farCornerIndex = plane.NormalAndDistance.z < 0f ? 0b110 : 0b111;
+                }
             }
         }
 
