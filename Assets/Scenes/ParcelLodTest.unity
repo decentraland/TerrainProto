@@ -197,7 +197,7 @@ Transform:
   m_GameObject: {fileID: 554357089}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -2000, y: 1, z: 0}
+  m_LocalPosition: {x: 0, y: 1, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -276,10 +276,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3c4e35bdd4b38f345aab62cb2f8d68ad, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  camera: {fileID: 554357091}
-  material: {fileID: 2100000, guid: bdfd12d7c889e1849b2731aa81f45f92, type: 2}
-  terrainSize: 300
   parcelSize: 16
+  terrainSize: 300
+  material: {fileID: 2100000, guid: bdfd12d7c889e1849b2731aa81f45f92, type: 2}
+  camera: {fileID: 554357091}
 --- !u!4 &651591194
 Transform:
   m_ObjectHideFlags: 0

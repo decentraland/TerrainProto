@@ -2,23 +2,29 @@ using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Mathematics.Geometry;
 using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using static Unity.Mathematics.math;
+using Plane = Unity.Mathematics.Geometry.Plane;
 
 namespace Decentraland.Terrain
 {
     [ExecuteAlways]
     public sealed class ParcelLODTest : MonoBehaviour
     {
-        [SerializeField] private Camera camera;
-        [SerializeField] private Material material;
-        [SerializeField] private int terrainSize = 300;
         [SerializeField] private int parcelSize = 16;
+        [SerializeField] private int terrainSize = 300;
+        [SerializeField] private Material material;
+        [SerializeField] private Camera camera;
 
         private NativeArray<int2> magicPattern;
         private Mesh parcelMesh;
+
+        private Vector3[] clipCorners = { new(-1f, -1f, 0f), new(-1f, -1f, 1f),
+            new(-1f, 1f, 0f), new(-1f, 1f, 1f), new(1f, -1f, 0f), new(1f, -1f, 1f), new(1f, 1f, 0f),
+            new(1f, 1f, 1f) };
 
         private void Awake()
         {
@@ -174,7 +180,7 @@ namespace Decentraland.Terrain
             if (!magicPattern.IsCreated)
                 CreateMagicPattern();
 
-            NativeArray<float4> clipPlanes = new NativeArray<float4>(6, Allocator.TempJob,
+            var clipPlanes = new NativeArray<ClipPlane>(6, Allocator.TempJob,
                 NativeArrayOptions.UninitializedMemory);
 
             var worldToProjectionMatrix = camera.projectionMatrix * camera.worldToCameraMatrix;
@@ -184,32 +190,37 @@ namespace Decentraland.Terrain
             float4 row2 = worldToProjectionMatrix.GetRow(2);
             float4 row3 = worldToProjectionMatrix.GetRow(3);
 
-            clipPlanes[0] = row3 + row0;
-            clipPlanes[1] = row3 - row0;
-            clipPlanes[2] = row3 + row1;
-            clipPlanes[3] = row3 - row1;
-            clipPlanes[4] = row3 + row2;
-            clipPlanes[5] = row3 - row2;
+            clipPlanes[0] = new ClipPlane(row3 + row0);
+            clipPlanes[1] = new ClipPlane(row3 - row0);
+            clipPlanes[2] = new ClipPlane(row3 + row1);
+            clipPlanes[3] = new ClipPlane(row3 - row1);
+            clipPlanes[4] = new ClipPlane(row3 + row2);
+            clipPlanes[5] = new ClipPlane(row3 - row2);
 
-            for (int i = 0; i < clipPlanes.Length; i++)
-                clipPlanes[i] /= length(clipPlanes[i].xyz);
+            var projectionToWorldMatrix = worldToProjectionMatrix.inverse;
+            float3 clipCorner0 = projectionToWorldMatrix.MultiplyPoint(clipCorners[0]);
+            MinMaxAABB clipBounds = new MinMaxAABB(clipCorner0, clipCorner0);
 
-            var parcelTransforms = new NativeList<Matrix4x4>(65536, Allocator.TempJob);
+            for (int i = 1; i < clipCorners.Length; i++)
+                clipBounds.Encapsulate(projectionToWorldMatrix.MultiplyPoint(clipCorners[i]));
+
+            var parcelTransforms = new NativeList<Matrix4x4>(64, Allocator.TempJob);
 
             Profiler.BeginSample("GenerateTerrainMesh");
 
-            var parcelMeshesJob = new GenerateTerrainJob()
+            var generateTerrainJob = new GenerateTerrainJob()
             {
-                terrainSize = terrainSize,
                 parcelSize = parcelSize,
+                terrainSize = terrainSize,
                 cameraPosition = cameraPosition,
-                magicPattern = magicPattern,
+                clipBounds = clipBounds,
                 clipPlanes = clipPlanes,
+                magicPattern = magicPattern,
                 parcelTransforms = parcelTransforms
             };
 
-            JobHandle parcelMeshes = parcelMeshesJob.Schedule();
-            parcelMeshes.Complete();
+            JobHandle generateTerrain = generateTerrainJob.Schedule();
+            generateTerrain.Complete();
 
             Profiler.EndSample();
 
@@ -236,11 +247,13 @@ namespace Decentraland.Terrain
 
         private struct GenerateTerrainJob : IJob
         {
-            public int terrainSize;
             public int parcelSize;
+            public int terrainSize;
+            public float maxHeight;
             public float3 cameraPosition;
+            public MinMaxAABB clipBounds;
+            [ReadOnly] public NativeArray<ClipPlane> clipPlanes;
             [ReadOnly] public NativeArray<int2> magicPattern;
-            [ReadOnly] public NativeArray<float4> clipPlanes;
             public NativeList<Matrix4x4> parcelTransforms;
 
             public void Execute()
@@ -249,17 +262,15 @@ namespace Decentraland.Terrain
                 int scale = (int)(cameraPosition.y / parcelSize) + 1;
 
                 for (int i = 0; i < 4; i++)
-                {
-                    bool outOfBounds = false;
-                    GenerateParcel(origin, magicPattern[i], scale, ref outOfBounds);
-                }
+                    TryGenerateParcel(origin, magicPattern[i], scale);
 
                 while (true)
                 {
                     bool outOfBounds = true;
 
                     for (int i = 4; i < 16; i++)
-                        GenerateParcel(origin, magicPattern[i], scale, ref outOfBounds);
+                        if (TryGenerateParcel(origin, magicPattern[i], scale))
+                            outOfBounds = false;
 
                     if (outOfBounds)
                         break;
@@ -268,44 +279,62 @@ namespace Decentraland.Terrain
                 }
             }
 
-            private void GenerateParcel(int2 origin, int2 parcel, int scale, ref bool outOfBounds)
+            private bool TryGenerateParcel(int2 origin, int2 parcel, int scale)
             {
-                RectInt terrainRect = new RectInt(terrainSize / -2, terrainSize / -2, terrainSize,
-                    terrainSize);
+                int2 position = (origin + parcel * scale) * parcelSize;
 
-                RectInt parcelRect = new RectInt(origin.x + parcel.x * scale,
-                    origin.y + parcel.y * scale, scale, scale);
+                if (!OverlapsClipVolume(position, scale))
+                    return false;
 
-                if (terrainRect.Overlaps(parcelRect))
-                {
-                    outOfBounds = false;
-
-                    if (OverlapsFrustum(parcelRect))
-                    {
-                        int2 position = (origin + parcel * scale) * parcelSize;
-
-                        parcelTransforms.Add(Matrix4x4.TRS(
-                            new Vector3(position.x, 0f, position.y),
-                            Quaternion.identity, Vector3.one * scale));
-                    }
-                }
-            }
-
-            private bool OverlapsFrustum(RectInt parcelRect)
-            {
-                float3 parcelLocalCenter
-                    = float3(parcelRect.width * parcelSize, 0f, parcelRect.height * parcelSize) * 0.5f;
-
-                float4 rectCenter = float4(parcelRect.x * parcelSize + parcelLocalCenter.x,
-                    parcelLocalCenter.y, parcelRect.y * parcelSize + parcelLocalCenter.z, 1f);
-
-                float negRectRadius = -length(parcelLocalCenter);
-
-                for (int i = 0; i < clipPlanes.Length; i++)
-                    if (dot(clipPlanes[i], rectCenter) < negRectRadius)
-                        return false;
+                parcelTransforms.Add(Matrix4x4.TRS(new Vector3(position.x, 0f, position.y),
+                    Quaternion.identity, Vector3.one * scale));
 
                 return true;
+            }
+
+            private bool OverlapsClipVolume(int2 min, int scale)
+            {
+                int2 max = min + scale * parcelSize;
+                var bounds = new MinMaxAABB(float3(min.x, 0f, min.y), float3(max.x, maxHeight, max.y));
+
+                if (!bounds.Overlaps(clipBounds))
+                    return false;
+
+                for (int i = 0; i < clipPlanes.Length; i++)
+                {
+                    ClipPlane clipPlane = clipPlanes[i];
+                    float3 farCorner = bounds.GetCorner(clipPlane.farCornerIndex);
+
+                    if (clipPlane.plane.SignedDistanceToPoint(farCorner) < 0f)
+                        return false;
+                }
+
+                return true;
+            }
+        }
+
+        private struct ClipPlane
+        {
+            public Plane plane;
+            public int farCornerIndex;
+
+            public ClipPlane(float4 coefficients)
+            {
+                plane = new Plane() { NormalAndDistance = Plane.Normalize(coefficients) };
+                if (plane.NormalAndDistance.x < 0f)
+                {
+                    if (plane.NormalAndDistance.y < 0f)
+                        farCornerIndex = plane.NormalAndDistance.z < 0f ? 0b000 : 0b001;
+                    else
+                        farCornerIndex = plane.NormalAndDistance.z < 0f ? 0b010 : 0b011;
+                }
+                else
+                {
+                    if (plane.NormalAndDistance.y < 0f)
+                        farCornerIndex = plane.NormalAndDistance.z < 0f ? 0b100 : 0b101;
+                    else
+                        farCornerIndex = plane.NormalAndDistance.z < 0f ? 0b110 : 0b111;
+                }
             }
         }
     }
