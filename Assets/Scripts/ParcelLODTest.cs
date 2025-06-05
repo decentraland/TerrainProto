@@ -204,6 +204,10 @@ namespace Decentraland.Terrain
             for (int i = 1; i < clipCorners.Length; i++)
                 clipBounds.Encapsulate(projectionToWorldMatrix.MultiplyPoint(clipCorners[i]));
 
+            int extent = terrainSize * parcelSize / 2;
+            var terrainBounds = new MinMaxAABB(float3(-extent, 0f, -extent), float3(extent, 0f, extent));
+            clipBounds.Clip(terrainBounds);
+
             var parcelTransforms = new NativeList<Matrix4x4>(64, Allocator.TempJob);
 
             Profiler.BeginSample("GenerateTerrainMesh");
@@ -236,7 +240,7 @@ namespace Decentraland.Terrain
                     layer = gameObject.layer,
                     material = material,
                     renderingLayerMask = RenderingLayerMask.defaultRenderingLayerMask,
-                    worldBounds = new(Vector3.zero, new(terrainHalfSize, 0f, terrainHalfSize))
+                    worldBounds = terrainBounds.ToBounds()
                 };
 
                 Graphics.RenderMeshInstanced(renderParams, parcelMesh, 0, parcelTransforms.AsArray());
