@@ -152,9 +152,6 @@ MonoBehaviour:
   terrainData: {fileID: 11400000, guid: 0ab6e914d370dba43abc414c54cd88b7, type: 2}
   material: {fileID: 2100000, guid: 554e958f7e96cf1438609751c7ca70d9, type: 2}
   detailDistance: 200
-  groundInstanceCapacity: 64
-  treeInstanceCapacity: 4096
-  detailInstanceCapacity: 16384
 --- !u!4 &248761157
 Transform:
   m_ObjectHideFlags: 0
@@ -598,7 +595,7 @@ Transform:
   m_GameObject: {fileID: 1044867122}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 4.3, y: 2.87, z: 3.88}
+  m_LocalPosition: {x: -44.6, y: 37.1, z: 19.8}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   parcelSize: 16
   terrainSize: 300
-  maxHeight: 4
+  maxHeight: 40
   seed: 9473297
   treeDensity: 0.15
   treePrototypes:
@@ -90,7 +90,7 @@ MonoBehaviour:
   detailPrototypes:
   - source: {fileID: 1333259486307050118, guid: 7326c89d1e84ecb429de2f08a2baf2fe, type: 3}
     scatterMode: 0
-    density: 8
+    density: 16
     alignToGround: 0
     minScaleXZ: 1
     maxScaleXZ: 2

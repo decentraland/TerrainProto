@@ -15,19 +15,21 @@ using Random = Unity.Mathematics.Random;
 
 namespace Decentraland.Terrain
 {
-    //[ExecuteAlways]
+    [ExecuteAlways]
     public sealed class TerrainRenderer : MonoBehaviour
     {
         [SerializeField] private TerrainData terrainData;
         [SerializeField] private Material material;
         [SerializeField] private float detailDistance = 200;
-        [SerializeField] private int groundInstanceCapacity = 64;
-        [SerializeField] private int treeInstanceCapacity = 8192;
-        [SerializeField] private int detailInstanceCapacity = 8192;
 
         private Bounds bounds;
         private Mesh groundMesh;
         private NativeArray<int2> magicPattern;
+
+        // Increase these numbers if you see the terrain renderer complain about them in the console.
+        private int groundInstanceCapacity = 80;
+        private int treeInstanceCapacity = 3000;
+        private int detailInstanceCapacity = 40000;
 
         private readonly Vector3[] clipCorners =
         {
@@ -248,7 +250,7 @@ namespace Decentraland.Terrain
 
             var groundTransforms = new NativeList<Matrix4x4>(groundInstanceCapacity, Allocator.TempJob);
 
-            var generateGroundJob = new GenerateTerrainJob()
+            var generateGroundJob = new GenerateGroundJob()
             {
                 parcelSize = parcelSize,
                 terrainSize = terrainData.terrainSize,
@@ -380,34 +382,67 @@ namespace Decentraland.Terrain
 #endif
             };
 
-            renderParams.worldBounds = bounds;
-
             generateGround.Complete();
-            RenderParcels(renderParams, groundTransforms.AsArray());
+
+            if (groundTransforms.Length > groundTransforms.Capacity)
+            {
+                groundInstanceCapacity = (int)ceil(groundInstanceCapacity * 1.1f);
+
+                Debug.LogWarning(
+                    $"The {nameof(groundTransforms)} list ran out of space. Increasing capacity to {groundInstanceCapacity}.",
+                    this);
+            }
+
 #if UNITY_EDITOR
             GroundInstanceCount = groundTransforms.Length;
 #endif
+
+            RenderGround(renderParams, groundTransforms.AsArray()
+                .GetSubArray(0, min(groundTransforms.Length, groundTransforms.Capacity)));
+
             groundTransforms.Dispose();
 
             scatterObjects.Complete();
             clipPlanes.Dispose();
 
             prepareTreeRenderList.Complete();
+
+            if (treeInstances.Length > treeInstances.Capacity)
+            {
+                treeInstanceCapacity = (int)ceil(treeInstanceCapacity * 1.1f);
+
+                Debug.LogWarning(
+                    $"The {nameof(treeInstances)} list ran out of space. Increasing capacity to {treeInstanceCapacity}.",
+                    this);
+            }
+
+#if UNITY_EDITOR
+            TreeInstanceCount = treeInstances.Length;
+#endif
+
             treeInstances.Dispose();
             RenderTrees(renderParams, treeTransforms.AsArray(), treeInstanceCounts);
             treeInstanceCounts.Dispose();
-#if UNITY_EDITOR
-            TreeInstanceCount = treeTransforms.Length;
-#endif
             treeTransforms.Dispose();
 
             prepareDetailRenderList.Complete();
+
+            if (detailInstances.Length > detailInstances.Capacity)
+            {
+                detailInstanceCapacity = (int)ceil(detailInstanceCapacity * 1.1f);
+
+                Debug.LogWarning(
+                    $"The {nameof(detailInstances)} list ran out of space. Increasing capacity to {detailInstanceCapacity}.",
+                    this);
+            }
+
+#if UNITY_EDITOR
+            DetailInstanceCount = detailInstances.Length;
+#endif
+
             detailInstances.Dispose();
             RenderDetails(renderParams, detailTransforms.AsArray(), detailInstanceCounts);
             detailInstanceCounts.Dispose();
-#if UNITY_EDITOR
-            DetailInstanceCount = detailTransforms.Length;
-#endif
             detailTransforms.Dispose();
 
             Profiler.EndSample();
@@ -441,7 +476,7 @@ namespace Decentraland.Terrain
             }
         }
 
-        private void RenderParcels(RenderParams renderParams, NativeArray<Matrix4x4> instanceData)
+        private void RenderGround(RenderParams renderParams, NativeArray<Matrix4x4> instanceData)
         {
             if (instanceData.Length == 0)
                 return;
@@ -492,7 +527,7 @@ namespace Decentraland.Terrain
             }
         }
 
-        private struct GenerateTerrainJob : IJob
+        private struct GenerateGroundJob : IJob
         {
             public int parcelSize;
             public int terrainSize;
@@ -509,14 +544,14 @@ namespace Decentraland.Terrain
                 int scale = (int)(cameraPosition.y / parcelSize) + 1;
 
                 for (int i = 0; i < 4; i++)
-                    TryGenerateParcel(origin, magicPattern[i], scale);
+                    TryGenerateGround(origin, magicPattern[i], scale);
 
                 while (true)
                 {
                     bool outOfBounds = true;
 
                     for (int i = 4; i < 16; i++)
-                        if (TryGenerateParcel(origin, magicPattern[i], scale))
+                        if (TryGenerateGround(origin, magicPattern[i], scale))
                             outOfBounds = false;
 
                     if (outOfBounds)
@@ -531,7 +566,7 @@ namespace Decentraland.Terrain
                 return (int2)round(value.xz * (1f / parcelSize) - 0.5f);
             }
 
-            private bool TryGenerateParcel(int2 origin, int2 parcel, int scale)
+            private bool TryGenerateGround(int2 origin, int2 parcel, int scale)
             {
                 int2 min = (origin + parcel * scale) * parcelSize;
                 int2 max = min + scale * parcelSize;
@@ -555,17 +590,16 @@ namespace Decentraland.Terrain
 
             public void Execute()
             {
-                if (instances.Length > instances.Capacity)
-                    throw new Exception("Instance list is borked");
+                // If NativeList<T>.ParallelWriter runs out of space, the length of the list will exceed
+                // its capacity. This code deals with that.
+                int totalInstanceCount = min(instances.Length, instances.Capacity);
+                instances.AsArray().GetSubArray(0, totalInstanceCount).Sort();
+                transforms.Capacity = totalInstanceCount;
 
-                instances.Sort();
                 int instanceCount = 0;
                 int meshIndex = 0;
 
-                if (transforms.Capacity < instances.Length)
-                    transforms.Capacity = instances.Length;
-
-                for (int instanceIndex = 0; instanceIndex < instances.Length; instanceIndex++)
+                for (int instanceIndex = 0; instanceIndex < totalInstanceCount; instanceIndex++)
                 {
                     DetailInstance instance = instances[instanceIndex];
 
@@ -595,15 +629,14 @@ namespace Decentraland.Terrain
 
             public void Execute()
             {
-                if (instances.Length > instances.Capacity)
-                    throw new Exception("Instance list is borked");
+                // If NativeList<T>.ParallelWriter runs out of space, the length of the list will exceed
+                // its capacity. This code deals with that.
+                int totalInstanceCount = min(instances.Length, instances.Capacity);
+                instances.AsArray().GetSubArray(0, totalInstanceCount).Sort();
+                transforms.Capacity = totalInstanceCount;
 
-                instances.Sort();
                 int instanceCount = 0;
                 int meshIndex = 0;
-
-                if (transforms.Capacity < instances.Length)
-                    transforms.Capacity = instances.Length;
 
                 for (int instanceIndex = 0; instanceIndex < instances.Length; instanceIndex++)
                 {
@@ -677,12 +710,16 @@ namespace Decentraland.Terrain
 
                     if (meshIndex < meshEnd)
                     {
-                        treeInstances.AddNoResize(new TreeInstance()
+                        try
                         {
-                            meshIndex = meshIndex,
-                            position = position,
-                            rotationY = rotationY
-                        });
+                            treeInstances.AddNoResize(new TreeInstance()
+                            {
+                                meshIndex = meshIndex,
+                                position = position,
+                                rotationY = rotationY
+                            });
+                        }
+                        catch (InvalidOperationException) { } // If we run out of space, do nothing.
                     }
                 }
 
@@ -690,19 +727,23 @@ namespace Decentraland.Terrain
 
                 if (distancesq(bounds.Center, cameraPosition) < detailSqrDistance)
                 {
-                    for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
+                    try
                     {
-                        DetailPrototypeData prototype = detailPrototypes[prototypeIndex];
-
-                        switch (prototype.scatterMode)
+                        for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
                         {
-                            case DetailScatterMode.JitteredGrid:
-                                JitteredGrid(parcel, prototype, prototypeIndex, ref random,
-                                    detailInstances);
+                            DetailPrototypeData prototype = detailPrototypes[prototypeIndex];
 
-                                break;
+                            switch (prototype.scatterMode)
+                            {
+                                case DetailScatterMode.JitteredGrid:
+                                    JitteredGrid(parcel, prototype, prototypeIndex, ref random,
+                                        detailInstances);
+
+                                    break;
+                            }
                         }
                     }
+                    catch (InvalidOperationException) { } // If we run out of space, do nothing.
                 }
             }
 
