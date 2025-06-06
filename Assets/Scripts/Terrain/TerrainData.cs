@@ -1,4 +1,5 @@
 using System;
+using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 using static Unity.Mathematics.math;
@@ -25,10 +26,75 @@ namespace Decentraland.Terrain
                 seed = 1;
         }
 
+        public static void LoadOccupancyMap(out Texture2D texture, out RectInt textureRect)
+        {
+            var worldManifestAsset = Resources.Load<TextAsset>("WorldManifest");
+            var worldManifest = JsonUtility.FromJson<WorldManifest>(worldManifestAsset.text);
+
+            var parcels = new int2[worldManifest.empty.Length];
+            int2 parcelMin = int2(int.MaxValue, int.MaxValue);
+            int2 parcelMax = int2(int.MinValue, int.MinValue);
+
+            for (int i = 0; i < worldManifest.empty.Length; i++)
+            {
+                string[] parcelStr = worldManifest.empty[i].Split(',');
+                int2 parcel = int2(int.Parse(parcelStr[0]), int.Parse(parcelStr[1]));
+                parcels[i] = parcel;
+                parcelMin = min(parcelMin, parcel);
+                parcelMax = max(parcelMax, parcel);
+            }
+
+            textureRect = new(parcelMin.x - 1, parcelMin.y - 1, parcelMax.x - parcelMin.x + 3,
+                parcelMax.y - parcelMin.y + 3);
+
+            texture = new Texture2D(textureRect.width, textureRect.height, TextureFormat.R8, false,
+                true);
+
+            texture.wrapMode = TextureWrapMode.Clamp;
+            NativeArray<byte> data = texture.GetRawTextureData<byte>();
+
+            // Add a black border so that the terrain height blends to zero at its edges.
+            {
+                int i = 0;
+
+                while (i < textureRect.width)
+                    data[i++] = 0;
+
+                int startOfLastRow = textureRect.width * (textureRect.height - 1);
+                int terrainWidth = textureRect.width - 2;
+
+                while (i < startOfLastRow)
+                {
+                    data[i++] = 0;
+
+                    for (int j = 0; j < terrainWidth; j++)
+                        data[i++] = 255;
+
+                    data[i++] = 0;
+                }
+
+                while (i < data.Length)
+                    data[i++] = 0;
+            }
+
+            for (int i = 0; i < parcels.Length; i++)
+            {
+                int2 parcel = parcels[i];
+                data[(parcel.y - textureRect.y) * textureRect.width + parcel.x - textureRect.x] = 0;
+            }
+
+            texture.Apply(false, false);
+        }
+
         public TerrainDataData GetData()
         {
             return new TerrainDataData(parcelSize, terrainSize, maxHeight, seed, treeDensity,
                 treePrototypes.Length);
+        }
+
+        private struct WorldManifest
+        {
+            public string[] empty;
         }
     }
 
