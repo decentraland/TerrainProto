@@ -62,10 +62,10 @@ namespace Decentraland.Terrain
             if (mainCamera == null)
                 return;
 
-            int parcelSize = terrainData.parcelSize;
-            float useRadius = parcelSize * (1f / 3f);
+            TerrainDataData terrainData = this.terrainData.GetData();
+            float useRadius = terrainData.parcelSize * (1f / 3f);
             var cameraPosition = mainCamera.transform.position;
-            RectInt usedRect = terrainData.WorldPositionToParcelRect(cameraPosition, useRadius);
+            RectInt usedRect = terrainData.PositionToParcelRect(cameraPosition, useRadius);
 
             for (int i = usedParcels.Count - 1; i >= 0; i--)
             {
@@ -86,7 +86,7 @@ namespace Decentraland.Terrain
                 if (usedParcels.Any(i => i.parcel == parcel))
                     continue;
 
-                Random random = terrainData.GetRandom(parcel);
+                Random random = terrainData.GetRandom(int2(parcel.x, parcel.y));
 
                 if (freeParcels.Count > 0)
                 {
@@ -116,21 +116,20 @@ namespace Decentraland.Terrain
                         freeParcels.RemoveAt(lastIndex);
                         usedParcels.Add(parcelData);
 
-                        SetParcelMeshVertices(parcelData.mesh, parcel);
+                        SetParcelMeshVertices(parcelData.mesh, parcel, in terrainData);
                         parcelData.collider.sharedMesh = parcelData.mesh;
 
                         parcelData.collider.transform.position = new Vector3(
-                            parcel.x * parcelSize, 0f, parcel.y * parcelSize);
+                            parcel.x * terrainData.parcelSize, 0f, parcel.y * terrainData.parcelSize);
 
-                        for (int i = 0; i < parcelData.trees.Count; i++)
+                        if (parcelData.treePrototypeIndex >= 0)
                         {
-                            TreeData tree = parcelData.trees[i];
-                            treePools[tree.prototypeIndex].Release(tree.instance);
+                            treePools[parcelData.treePrototypeIndex].Release(parcelData.treeInstance);
+                            parcelData.treeInstance = null;
+                            parcelData.treePrototypeIndex = -1;
                         }
 
-                        parcelData.trees.Clear();
-
-                        CreateTrees(parcel, ref random, parcelData.trees);
+                        GenerateTree(parcel, in terrainData, ref random, parcelData);
                     }
                 }
                 else
@@ -140,82 +139,48 @@ namespace Decentraland.Terrain
 
                     parcelData.mesh.name = "Parcel Collision Mesh";
                     parcelData.mesh.MarkDynamic();
-                    SetParcelMeshVertices(parcelData.mesh, parcel);
+                    SetParcelMeshVertices(parcelData.mesh, parcel, in terrainData);
                     SetParcelMeshIndicesAndNormals(parcelData.mesh);
 
-                    Vector3 parcelMax = new Vector3(parcelSize, terrainData.maxHeight, parcelSize);
+                    Vector3 parcelMax = new Vector3(terrainData.parcelSize, terrainData.maxHeight,
+                        terrainData.parcelSize);
+
                     parcelData.mesh.bounds = new Bounds(parcelMax * 0.5f, parcelMax);
 
                     parcelData.collider = new GameObject("Parcel Collider")
                         .AddComponent<MeshCollider>();
-
-                    parcelData.collider.transform.position = new Vector3(
-                        parcel.x * parcelSize, 0f, parcel.y * parcelSize);
 
                     parcelData.collider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation
                                                          | MeshColliderCookingOptions.UseFastMidphase;
 
                     parcelData.collider.sharedMesh = parcelData.mesh;
 
-                    CreateTrees(parcel, ref random, parcelData.trees);
+                    parcelData.collider.transform.position = new Vector3(
+                        parcel.x * terrainData.parcelSize, 0f, parcel.y * terrainData.parcelSize);
+
+                    GenerateTree(parcel, in terrainData, ref random, parcelData);
 
 #if UNITY_EDITOR
                     parcelData.collider.transform.SetParent(transform, true);
 #endif
                 }
             }
-
-
-#if UNITY_EDITOR
-            for (int y = usedRect.yMin; y < usedRect.yMax; y++)
-            for (int x = usedRect.xMin; x < usedRect.xMax; x++)
-            {
-                Vector2Int parcel = new Vector2Int(x, y);
-
-                Vector3 a = new Vector3(parcel.x * parcelSize, cameraPosition.y, parcel.y * parcelSize);
-                Vector3 b = a + new Vector3(parcelSize, 0f, 0f);
-                Vector3 c = a + new Vector3(parcelSize, 0f, parcelSize);
-                Vector3 d = a + new Vector3(0f, 0f, parcelSize);
-
-                Debug.DrawLine(a, b, Color.white);
-                Debug.DrawLine(b, c, Color.white);
-                Debug.DrawLine(c, d, Color.white);
-                Debug.DrawLine(d, a, Color.white);
-            }
-
-            {
-                Vector3 a = cameraPosition + new Vector3(-useRadius, 0f, -useRadius);
-                Vector3 b = cameraPosition + new Vector3(useRadius, 0f, -useRadius);
-                Vector3 c = cameraPosition + new Vector3(useRadius, 0f, useRadius);
-                Vector3 d = cameraPosition + new Vector3(-useRadius, 0f, useRadius);
-
-                Debug.DrawLine(a, b, Color.green);
-                Debug.DrawLine(b, c, Color.green);
-                Debug.DrawLine(c, d, Color.green);
-                Debug.DrawLine(d, a, Color.green);
-            }
-#endif
         }
 
-        private void CreateTrees(Vector2Int parcel, ref Random random, List<TreeData> trees)
+        private void GenerateTree(Vector2Int parcel, in TerrainDataData terrainData, ref Random random,
+            ParcelData parcelData)
         {
-            if (!TerrainData.NextTree(int2(parcel.x, parcel.y), terrainData.parcelSize,
-                    terrainData.treeDensity, terrainData.treePrototypes.Length, ref random,
+            if (!terrainData.NextTree(int2(parcel.x, parcel.y), ref random,
                     out float3 position, out float rotationY, out int prototypeIndex))
             {
                 return;
             }
 
-            TreeData tree = new TreeData()
-            {
-                instance = treePools[prototypeIndex].Get(),
-                prototypeIndex = prototypeIndex
-            };
+            parcelData.treeInstance = treePools[prototypeIndex].Get();
+            parcelData.treePrototypeIndex = prototypeIndex;
 
-            tree.instance.transform.SetPositionAndRotation(position,
+            parcelData.treeInstance.transform.SetPositionAndRotation(position,
                 Quaternion.Euler(0f, rotationY, 0f));
-
-            trees.Add(tree);
         }
 
         private void SetParcelMeshIndicesAndNormals(Mesh mesh)
@@ -262,7 +227,7 @@ namespace Decentraland.Terrain
 #endif
         }
 
-        private void SetParcelMeshVertices(Mesh mesh, Vector2Int parcel)
+        private void SetParcelMeshVertices(Mesh mesh, Vector2Int parcel, in TerrainDataData terrainData)
         {
             Profiler.BeginSample(nameof(SetParcelMeshVertices));
             int parcelSize = terrainData.parcelSize;
@@ -278,7 +243,7 @@ namespace Decentraland.Terrain
                 {
                     for (int x = 0; x < sideVertexCount; x++)
                     {
-                        float y = TerrainData.GetHeight(x + parcelOriginXZ.x, z + parcelOriginXZ.y);
+                        float y = terrainData.GetHeight(x + parcelOriginXZ.x, z + parcelOriginXZ.y);
                         vertices.Add(new Vector3(x, y, z));
                     }
                 }
@@ -301,14 +266,8 @@ namespace Decentraland.Terrain
             public Vector2Int parcel;
             public MeshCollider collider;
             public Mesh mesh;
-            public List<TreeData> trees = new();
-        }
-
-        [Serializable]
-        private struct TreeData
-        {
-            public GameObject instance;
-            public int prototypeIndex;
+            public int treePrototypeIndex = -1;
+            public GameObject treeInstance;
         }
     }
 }

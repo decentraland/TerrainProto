@@ -346,6 +346,21 @@ namespace Decentraland.Terrain
             return float4(getHeight_optimised_int(worldPos, frequency), getNormal_optimised_int(worldPos, frequency, quality));
         }
 
+        /// <summary>
+        /// lowbias32 updated with the latest best constants. See
+        /// https://nullprogram.com/blog/2018/07/31/ and
+        /// https://github.com/skeeto/hash-prospector/issues/19
+        /// </summary>
+        internal static uint lowbias32(uint x)
+        {
+            x ^= x >> 16;
+            x *= 0x21f0aaad;
+            x ^= x >> 15;
+            x *= 0xd35a2d97;
+            x ^= x >> 15;
+            return x;
+        }
+
         // ============================================================================
         // CPU USAGE FUNCTIONS
         // ============================================================================

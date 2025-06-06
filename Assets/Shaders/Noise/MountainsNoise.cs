@@ -87,6 +87,21 @@ namespace Decentraland.Terrain
             return 130.0f * dot(m, g);
         }
 
+        /// <summary>
+        /// lowbias32 updated with the latest best constants. See
+        /// https://nullprogram.com/blog/2018/07/31/ and
+        /// https://github.com/skeeto/hash-prospector/issues/19
+        /// </summary>
+        internal static uint lowbias32(uint x)
+        {
+            x ^= x >> 16;
+            x *= 0x21f0aaad;
+            x ^= x >> 15;
+            x *= 0xd35a2d97;
+            x ^= x >> 15;
+            return x;
+        }
+
         internal static float GetHeight(float x, float z)
         {
             float scale = 0.02f;

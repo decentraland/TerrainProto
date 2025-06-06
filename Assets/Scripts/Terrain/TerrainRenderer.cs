@@ -326,10 +326,7 @@ namespace Decentraland.Terrain
 
             var scatterObjectsJob = new ScatterObjectsJob()
             {
-                parcelSize = terrainData.parcelSize,
-                terrainSize = terrainData.terrainSize,
-                maxHeight = terrainData.maxHeight,
-                seed = terrainData.seed,
+                terrainData = terrainData.GetData(),
                 detailSqrDistance = detailDistance * detailDistance,
                 cameraPosition = cameraPosition,
                 clipBounds = clipBounds,
@@ -558,6 +555,9 @@ namespace Decentraland.Terrain
 
             public void Execute()
             {
+                if (instances.Length > instances.Capacity)
+                    throw new Exception("Instance list is borked");
+
                 instances.Sort();
                 int instanceCount = 0;
                 int meshIndex = 0;
@@ -595,6 +595,9 @@ namespace Decentraland.Terrain
 
             public void Execute()
             {
+                if (instances.Length > instances.Capacity)
+                    throw new Exception("Instance list is borked");
+
                 instances.Sort();
                 int instanceCount = 0;
                 int meshIndex = 0;
@@ -626,10 +629,7 @@ namespace Decentraland.Terrain
 
         private struct ScatterObjectsJob : IJobParallelFor
         {
-            public int terrainSize;
-            public int parcelSize;
-            public float maxHeight;
-            public int seed;
+            public TerrainDataData terrainData;
             public float detailSqrDistance;
             public float3 cameraPosition;
             public MinMaxAABB clipBounds;
@@ -644,22 +644,24 @@ namespace Decentraland.Terrain
             public void Execute(int index)
             {
                 int2 parcel = int2(
-                    index % terrainSize - terrainSize / 2,
-                    index / terrainSize - terrainSize / 2);
+                    index % terrainData.terrainSize - terrainData.terrainSize / 2,
+                    index / terrainData.terrainSize - terrainData.terrainSize / 2);
 
-                int2 min = parcel * parcelSize;
-                int2 max = min + parcelSize;
-                var bounds = new MinMaxAABB(float3(min.x, 0f, min.y), float3(max.x, maxHeight, max.y));
+                int2 min = parcel * terrainData.parcelSize;
+                int2 max = min + terrainData.parcelSize;
+
+                var bounds = new MinMaxAABB(float3(min.x, 0f, min.y),
+                    float3(max.x, terrainData.maxHeight, max.y));
 
                 if (!OverlapsClipVolume(bounds, clipBounds, clipPlanes))
                     return;
 
-                Random random = TerrainData.GetRandom(parcel, terrainSize, seed);
+                Random random = terrainData.GetRandom(parcel);
 
                 // Tree scattering
 
-                if (TerrainData.NextTree(parcel, parcelSize, treeDensity, treePrototypes.Length,
-                        ref random, out float3 position, out float rotationY, out int prototypeIndex0))
+                if (terrainData.NextTree(parcel, ref random, out float3 position, out float rotationY,
+                        out int prototypeIndex0))
                 {
                     int prototypeIndex = prototypeIndex0;
                     TreePrototypeData prototype = treePrototypes[prototypeIndex];
@@ -707,15 +709,20 @@ namespace Decentraland.Terrain
             private void JitteredGrid(int2 parcel, DetailPrototypeData prototype, int meshIndex,
                 ref Random random, NativeList<DetailInstance>.ParallelWriter instances)
             {
-                float invDensity = (float)parcelSize / prototype.density;
+                float invDensity = (float)terrainData.parcelSize / prototype.density;
 
                 for (int z = 0; z < prototype.density; z++)
                 for (int x = 0; x < prototype.density; x++)
                 {
-                    Vector3 position;
-                    position.x = parcel.x * parcelSize + x * invDensity + random.NextFloat(invDensity);
-                    position.z = parcel.y * parcelSize + z * invDensity + random.NextFloat(invDensity);
-                    position.y = TerrainData.GetHeight(position.x, position.z);
+                    float3 position;
+
+                    position.x = parcel.x * terrainData.parcelSize + x * invDensity
+                                                                   + random.NextFloat(invDensity);
+
+                    position.z = parcel.y * terrainData.parcelSize + z * invDensity
+                                                                   + random.NextFloat(invDensity);
+
+                    position.y = terrainData.GetHeight(position.x, position.z);
 
                     float rotationY = random.NextFloat(-180f, 180f);
 
