@@ -25,7 +25,7 @@ namespace Decentraland.Terrain
 
         private Bounds bounds;
         private Mesh groundMesh;
-        private NativeArray<int2> magicPattern;
+        private NativeArray<int4> magicPattern;
 
         // Increase these numbers if you see the terrain renderer complain about them in the console.
         private int groundInstanceCapacity = 80;
@@ -145,27 +145,31 @@ namespace Decentraland.Terrain
             return parcelMesh;
         }
 
-        private static NativeArray<int2> CreateMagicPattern()
+        private static NativeArray<int4> CreateMagicPattern()
         {
-            var magicPattern = new NativeArray<int2>(16, Allocator.Persistent,
+            var magicPattern = new NativeArray<int4>(16, Allocator.Persistent,
                 NativeArrayOptions.UninitializedMemory);
 
-            magicPattern[0] = int2(0, 0);
-            magicPattern[1] = int2(-1, 0);
-            magicPattern[2] = int2(-1, -1);
-            magicPattern[3] = int2(0, -1);
-            magicPattern[4] = int2(1, 1);
-            magicPattern[5] = int2(0, 1);
-            magicPattern[6] = int2(-1, 1);
-            magicPattern[7] = int2(-2, 1);
-            magicPattern[8] = int2(-2, 0);
-            magicPattern[9] = int2(-2, -1);
-            magicPattern[10] = int2(-2, -2);
-            magicPattern[11] = int2(-1, -2);
-            magicPattern[12] = int2(0, -2);
-            magicPattern[13] = int2(1, -2);
-            magicPattern[14] = int2(1, -1);
-            magicPattern[15] = int2(1, 0);
+            // x, y are coordinates, z is the mesh to use (0 normal, 1 low res edge piece, 2 low res
+            // corner piece), w is the rotation (0 is corner piece top right or edge piece top, rotate
+            // counter-clockwise)
+
+            magicPattern[0] = int4(0, 0, 0, 0);
+            magicPattern[1] = int4(-1, 0, 0, 0);
+            magicPattern[2] = int4(-1, -1, 0, 0);
+            magicPattern[3] = int4(0, -1, 0, 0);
+            magicPattern[4] = int4(1, 1, 2, 0);
+            magicPattern[5] = int4(0, 1, 1, 0);
+            magicPattern[6] = int4(-1, 1, 1, 0);
+            magicPattern[7] = int4(-2, 1, 2, 90);
+            magicPattern[8] = int4(-2, 0, 1, 90);
+            magicPattern[9] = int4(-2, -1, 1, 90);
+            magicPattern[10] = int4(-2, -2, 2, 180);
+            magicPattern[11] = int4(-1, -2, 1, 180);
+            magicPattern[12] = int4(0, -2, 1, 180);
+            magicPattern[13] = int4(1, -2, 2, 270);
+            magicPattern[14] = int4(1, -1, 1, 270);
+            magicPattern[15] = int4(1, 0, 1, 270);
 
             return magicPattern;
         }
@@ -569,7 +573,7 @@ namespace Decentraland.Terrain
             public float3 cameraPosition;
             public MinMaxAABB clipBounds;
             [ReadOnly] public NativeArray<ClipPlane> clipPlanes;
-            [ReadOnly] public NativeArray<int2> magicPattern;
+            [ReadOnly] public NativeArray<int4> magicPattern;
             public NativeList<Matrix4x4> groundTransforms;
 
             public void Execute()
@@ -578,14 +582,14 @@ namespace Decentraland.Terrain
                 int scale = (int)(cameraPosition.y / parcelSize) + 1;
 
                 for (int i = 0; i < 4; i++)
-                    TryGenerateGround(origin, magicPattern[i], scale);
+                    TryGenerateGround(origin, magicPattern[i].xy, scale);
 
                 while (true)
                 {
                     bool outOfBounds = true;
 
                     for (int i = 4; i < 16; i++)
-                        if (TryGenerateGround(origin, magicPattern[i], scale))
+                        if (TryGenerateGround(origin, magicPattern[i].xy, scale))
                             outOfBounds = false;
 
                     if (outOfBounds)
