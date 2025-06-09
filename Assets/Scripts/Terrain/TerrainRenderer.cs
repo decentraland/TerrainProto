@@ -21,6 +21,7 @@ namespace Decentraland.Terrain
         [SerializeField] private TerrainData terrainData;
         [SerializeField] private Material material;
         [SerializeField] private float detailDistance = 200;
+        [SerializeField] private bool renderTreesAndDetail = true;
 
         private Bounds bounds;
         private Mesh groundMesh;
@@ -264,111 +265,141 @@ namespace Decentraland.Terrain
 
             JobHandle generateGround = generateGroundJob.Schedule();
 
-            // Deallocated by ScatterObjectsJob
-            var treePrototypes = new NativeArray<TreePrototypeData>(terrainData.treePrototypes.Length,
-                Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            JobHandle scatterObjects;
+            NativeList<TreeInstance> treeInstances;
+            NativeArray<int> treeInstanceCounts;
+            NativeList<DetailInstance> detailInstances;
+            NativeArray<int> detailInstanceCounts;
+            JobHandle prepareTreeRenderList;
+            NativeList<Matrix4x4> treeTransforms;
+            JobHandle prepareDetailRenderList;
+            NativeList<Matrix4x4> detailTransforms;
 
-            int treeMeshCount = 0;
-
-            for (int prototypeIndex = 0; prototypeIndex < treePrototypes.Length; prototypeIndex++)
+            if (renderTreesAndDetail)
             {
-                TreePrototype prototype = terrainData.treePrototypes[prototypeIndex];
+                // Deallocated by ScatterObjectsJob
+                var treePrototypes = new NativeArray<TreePrototypeData>(
+                    terrainData.treePrototypes.Length, Allocator.TempJob,
+                    NativeArrayOptions.UninitializedMemory);
 
-                treePrototypes[prototypeIndex] = new TreePrototypeData()
+                int treeMeshCount = 0;
+
+                for (int prototypeIndex = 0; prototypeIndex < treePrototypes.Length; prototypeIndex++)
                 {
-                    localSize = prototype.localSize,
-                    lod0MeshIndex = treeMeshCount
-                };
+                    TreePrototype prototype = terrainData.treePrototypes[prototypeIndex];
 
-                treeMeshCount += prototype.lods.Length;
-            }
-
-            // Deallocated by ScatterObjectsJob
-            var treeLods = new NativeArray<TreeLODData>(treeMeshCount, Allocator.TempJob,
-                NativeArrayOptions.UninitializedMemory);
-
-            for (int prototypeIndex = 0; prototypeIndex < treePrototypes.Length; prototypeIndex++)
-            {
-                TreeLOD[] lods = terrainData.treePrototypes[prototypeIndex].lods;
-                int lod0MeshIndex = treePrototypes[prototypeIndex].lod0MeshIndex;
-
-                for (int lodIndex = 0; lodIndex < lods.Length; lodIndex++)
-                {
-                    treeLods[lod0MeshIndex + lodIndex] = new TreeLODData()
+                    treePrototypes[prototypeIndex] = new TreePrototypeData()
                     {
-                        minScreenSize = lods[lodIndex].minScreenSize
+                        localSize = prototype.localSize,
+                        lod0MeshIndex = treeMeshCount
+                    };
+
+                    treeMeshCount += prototype.lods.Length;
+                }
+
+                // Deallocated by ScatterObjectsJob
+                var treeLods = new NativeArray<TreeLODData>(treeMeshCount, Allocator.TempJob,
+                    NativeArrayOptions.UninitializedMemory);
+
+                for (int prototypeIndex = 0; prototypeIndex < treePrototypes.Length; prototypeIndex++)
+                {
+                    TreeLOD[] lods = terrainData.treePrototypes[prototypeIndex].lods;
+                    int lod0MeshIndex = treePrototypes[prototypeIndex].lod0MeshIndex;
+
+                    for (int lodIndex = 0; lodIndex < lods.Length; lodIndex++)
+                    {
+                        treeLods[lod0MeshIndex + lodIndex] = new TreeLODData()
+                        {
+                            minScreenSize = lods[lodIndex].minScreenSize
+                        };
+                    }
+                }
+
+                // Deallocated by ScatterObjectsJob
+                var detailPrototypes = new NativeArray<DetailPrototypeData>(
+                    terrainData.detailPrototypes.Length, Allocator.TempJob,
+                    NativeArrayOptions.UninitializedMemory);
+
+                for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
+                {
+                    DetailPrototype prototype = terrainData.detailPrototypes[prototypeIndex];
+
+                    detailPrototypes[prototypeIndex] = new DetailPrototypeData()
+                    {
+                        scatterMode = prototype.scatterMode,
+                        density = prototype.density,
+                        minScaleXZ = prototype.minScaleXZ,
+                        maxScaleXZ = prototype.maxScaleXZ,
+                        minScaleY = prototype.minScaleY,
+                        maxScaleY = prototype.maxScaleY
                     };
                 }
-            }
 
-            // Deallocated by ScatterObjectsJob
-            var detailPrototypes = new NativeArray<DetailPrototypeData>(
-                terrainData.detailPrototypes.Length, Allocator.TempJob,
-                NativeArrayOptions.UninitializedMemory);
+                treeInstances = new NativeList<TreeInstance>(treeInstanceCapacity,
+                    Allocator.TempJob);
 
-            for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
-            {
-                DetailPrototype prototype = terrainData.detailPrototypes[prototypeIndex];
+                detailInstances = new NativeList<DetailInstance>(detailInstanceCapacity,
+                    Allocator.TempJob);
 
-                detailPrototypes[prototypeIndex] = new DetailPrototypeData()
+                var scatterObjectsJob = new ScatterObjectsJob()
                 {
-                    scatterMode = prototype.scatterMode,
-                    density = prototype.density,
-                    minScaleXZ = prototype.minScaleXZ,
-                    maxScaleXZ = prototype.maxScaleXZ,
-                    minScaleY = prototype.minScaleY,
-                    maxScaleY = prototype.maxScaleY
+                    terrainData = terrainData.GetData(),
+                    detailSqrDistance = detailDistance * detailDistance,
+                    cameraPosition = cameraPosition,
+                    clipBounds = clipBounds,
+                    clipPlanes = clipPlanes,
+                    treeDensity = terrainData.treeDensity,
+                    treePrototypes = treePrototypes,
+                    treeLods = treeLods,
+                    detailPrototypes = detailPrototypes,
+                    treeInstances = treeInstances.AsParallelWriter(),
+                    detailInstances = detailInstances.AsParallelWriter()
                 };
+
+                int parcelCount = terrainData.terrainSize * terrainData.terrainSize;
+
+                scatterObjects = scatterObjectsJob.Schedule(parcelCount,
+                    JobUtility.GetBatchSize(parcelCount));
+
+
+                treeInstanceCounts = new NativeArray<int>(treeMeshCount, Allocator.TempJob);
+                treeTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
+
+                var prepareTreeRenderListJob = new PrepareTreeRenderListJob()
+                {
+                    instances = treeInstances,
+                    instanceCounts = treeInstanceCounts,
+                    transforms = treeTransforms
+                };
+
+                prepareTreeRenderList = prepareTreeRenderListJob.Schedule(scatterObjects);
+
+                detailInstanceCounts = new NativeArray<int>(detailPrototypes.Length,
+                    Allocator.TempJob);
+
+                detailTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
+
+                var prepareDetailRenderListJob = new PrepareDetailRenderListJob()
+                {
+                    instances = detailInstances,
+                    instanceCounts = detailInstanceCounts,
+                    transforms = detailTransforms
+                };
+
+                prepareDetailRenderList = prepareDetailRenderListJob.Schedule(scatterObjects);
             }
-
-            var treeInstances = new NativeList<TreeInstance>(treeInstanceCapacity, Allocator.TempJob);
-
-            var detailInstances = new NativeList<DetailInstance>(detailInstanceCapacity,
-                Allocator.TempJob);
-
-            var scatterObjectsJob = new ScatterObjectsJob()
+            else
             {
-                terrainData = terrainData.GetData(),
-                detailSqrDistance = detailDistance * detailDistance,
-                cameraPosition = cameraPosition,
-                clipBounds = clipBounds,
-                clipPlanes = clipPlanes,
-                treeDensity = terrainData.treeDensity,
-                treePrototypes = treePrototypes,
-                treeLods = treeLods,
-                detailPrototypes = detailPrototypes,
-                treeInstances = treeInstances.AsParallelWriter(),
-                detailInstances = detailInstances.AsParallelWriter()
-            };
-
-            int parcelCount = terrainData.terrainSize * terrainData.terrainSize;
-
-            JobHandle scatterObjects = scatterObjectsJob.Schedule(parcelCount,
-                JobUtility.GetBatchSize(parcelCount));
-
-            var treeInstanceCounts = new NativeArray<int>(treeMeshCount, Allocator.TempJob);
-            var treeTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
-
-            var prepareTreeRenderListJob = new PrepareTreeRenderListJob()
-            {
-                instances = treeInstances,
-                instanceCounts = treeInstanceCounts,
-                transforms = treeTransforms
-            };
-
-            JobHandle prepareTreeRenderList = prepareTreeRenderListJob.Schedule(scatterObjects);
-
-            var detailInstanceCounts = new NativeArray<int>(detailPrototypes.Length, Allocator.TempJob);
-            var detailTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
-
-            var prepareDetailRenderListJob = new PrepareDetailRenderListJob()
-            {
-                instances = detailInstances,
-                instanceCounts = detailInstanceCounts,
-                transforms = detailTransforms
-            };
-
-            JobHandle prepareDetailRenderList = prepareDetailRenderListJob.Schedule(scatterObjects);
+                scatterObjects = default;
+                treeInstances = default;
+                treeInstanceCounts = default;
+                detailInstances = default;
+                detailInstanceCounts = default;
+                prepareTreeRenderList = default;
+                treeTransforms = default;
+                prepareDetailRenderList = default;
+                detailTransforms = default;
+            }
 
             var renderParams = new RenderParams()
             {
@@ -402,48 +433,51 @@ namespace Decentraland.Terrain
 
             groundTransforms.Dispose();
 
-            scatterObjects.Complete();
-            clipPlanes.Dispose();
-
-            prepareTreeRenderList.Complete();
-
-            if (treeInstances.Length > treeInstances.Capacity)
+            if (renderTreesAndDetail)
             {
-                treeInstanceCapacity = (int)ceil(treeInstanceCapacity * 1.1f);
+                scatterObjects.Complete();
+                clipPlanes.Dispose();
 
-                Debug.LogWarning(
-                    $"The {nameof(treeInstances)} list ran out of space. Increasing capacity to {treeInstanceCapacity}.",
-                    this);
-            }
+                prepareTreeRenderList.Complete();
+
+                if (treeInstances.Length > treeInstances.Capacity)
+                {
+                    treeInstanceCapacity = (int)ceil(treeInstanceCapacity * 1.1f);
+
+                    Debug.LogWarning(
+                        $"The {nameof(treeInstances)} list ran out of space. Increasing capacity to {treeInstanceCapacity}.",
+                        this);
+                }
 
 #if UNITY_EDITOR
-            TreeInstanceCount = treeInstances.Length;
+                TreeInstanceCount = treeInstances.Length;
 #endif
 
-            treeInstances.Dispose();
-            RenderTrees(renderParams, treeTransforms.AsArray(), treeInstanceCounts);
-            treeInstanceCounts.Dispose();
-            treeTransforms.Dispose();
+                treeInstances.Dispose();
+                RenderTrees(renderParams, treeTransforms.AsArray(), treeInstanceCounts);
+                treeInstanceCounts.Dispose();
+                treeTransforms.Dispose();
 
-            prepareDetailRenderList.Complete();
+                prepareDetailRenderList.Complete();
 
-            if (detailInstances.Length > detailInstances.Capacity)
-            {
-                detailInstanceCapacity = (int)ceil(detailInstanceCapacity * 1.1f);
+                if (detailInstances.Length > detailInstances.Capacity)
+                {
+                    detailInstanceCapacity = (int)ceil(detailInstanceCapacity * 1.1f);
 
-                Debug.LogWarning(
-                    $"The {nameof(detailInstances)} list ran out of space. Increasing capacity to {detailInstanceCapacity}.",
-                    this);
-            }
+                    Debug.LogWarning(
+                        $"The {nameof(detailInstances)} list ran out of space. Increasing capacity to {detailInstanceCapacity}.",
+                        this);
+                }
 
 #if UNITY_EDITOR
-            DetailInstanceCount = detailInstances.Length;
+                DetailInstanceCount = detailInstances.Length;
 #endif
 
-            detailInstances.Dispose();
-            RenderDetails(renderParams, detailTransforms.AsArray(), detailInstanceCounts);
-            detailInstanceCounts.Dispose();
-            detailTransforms.Dispose();
+                detailInstances.Dispose();
+                RenderDetails(renderParams, detailTransforms.AsArray(), detailInstanceCounts);
+                detailInstanceCounts.Dispose();
+                detailTransforms.Dispose();
+            }
 
             Profiler.EndSample();
         }
