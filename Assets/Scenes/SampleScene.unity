@@ -152,6 +152,11 @@ MonoBehaviour:
   terrainData: {fileID: 11400000, guid: 0ab6e914d370dba43abc414c54cd88b7, type: 2}
   material: {fileID: 2100000, guid: 554e958f7e96cf1438609751c7ca70d9, type: 2}
   detailDistance: 200
+  renderTreesAndDetail: 0
+  groundMeshes:
+  - {fileID: 1394718660543912083, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
+  - {fileID: 2474922959326173943, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
+  - {fileID: -3615330361707025511, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
 --- !u!4 &248761157
 Transform:
   m_ObjectHideFlags: 0

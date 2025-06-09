@@ -9,7 +9,6 @@ using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using static Unity.Mathematics.math;
-using Object = UnityEngine.Object;
 using Plane = Unity.Mathematics.Geometry.Plane;
 using Random = Unity.Mathematics.Random;
 
@@ -22,9 +21,9 @@ namespace Decentraland.Terrain
         [SerializeField] private Material material;
         [SerializeField] private float detailDistance = 200;
         [SerializeField] private bool renderTreesAndDetail = true;
+        [SerializeField] private Mesh[] groundMeshes;
 
         private Bounds bounds;
-        private Mesh groundMesh;
         private NativeArray<int4> magicPattern;
 
         // Increase these numbers if you see the terrain renderer complain about them in the console.
@@ -42,30 +41,17 @@ namespace Decentraland.Terrain
 #if UNITY_EDITOR
         public int DetailInstanceCount { get; private set; }
         public int GroundInstanceCount { get; private set; }
-        public Mesh GroundMesh => groundMesh;
         public int TreeInstanceCount { get; private set; }
 #endif
 
         private void OnValidate()
         {
-#if UNITY_EDITOR
-            if (groundMesh != null)
-            {
-                if (!Application.isPlaying)
-                    Object.DestroyImmediate(groundMesh);
-                else
-                    Object.Destroy(groundMesh);
-            }
-#endif
-
             if (terrainData == null)
                 return;
 
             int halfSideLength = terrainData.parcelSize * terrainData.terrainSize / 2;
             Vector3 center = new Vector3(0f, terrainData.maxHeight * 0.5f, 0f);
             bounds = new Bounds(center, new Vector3(halfSideLength, center.y, halfSideLength));
-
-            groundMesh = CreateGroundMesh(terrainData.parcelSize);
 
             if (!magicPattern.IsCreated)
                 magicPattern = CreateMagicPattern();
@@ -85,64 +71,6 @@ namespace Decentraland.Terrain
         {
             if (magicPattern.IsCreated)
                 magicPattern.Dispose();
-
-            if (groundMesh != null)
-            {
-#if UNITY_EDITOR
-                if (!Application.isPlaying)
-                    Object.DestroyImmediate(groundMesh);
-                else
-#endif
-                    Object.Destroy(groundMesh);
-            }
-        }
-
-        private static Mesh CreateGroundMesh(int parcelSize)
-        {
-            var parcelMesh = new Mesh()
-            {
-                name = "Terrain Render Mesh",
-                hideFlags = HideFlags.DontSave
-            };
-
-            int sideVertexCount = parcelSize + 1;
-            var vertices = new Vector3[sideVertexCount * sideVertexCount];
-
-            for (int z = 0; z <= parcelSize; z++)
-            for (int x = 0; x <= parcelSize; x++)
-                vertices[z * sideVertexCount + x] = new Vector3(x, 0f, z);
-
-            var triangles = new int[parcelSize * parcelSize * 6];
-            int index = 0;
-
-            for (int z = 0; z < parcelSize; z++)
-            {
-                for (int x = 0; x < parcelSize; x++)
-                {
-                    int start = z * sideVertexCount + x;
-
-                    triangles[index++] = start;
-                    triangles[index++] = start + sideVertexCount + 1;
-                    triangles[index++] = start + 1;
-
-                    triangles[index++] = start;
-                    triangles[index++] = start + sideVertexCount;
-                    triangles[index++] = start + sideVertexCount + 1;
-                }
-            }
-
-            var normals = new Vector3[sideVertexCount * sideVertexCount];
-
-            for (int z = 0; z <= parcelSize; z++)
-            for (int x = 0; x <= parcelSize; x++)
-                normals[z * sideVertexCount + x] = Vector3.up;
-
-            parcelMesh.vertices = vertices;
-            parcelMesh.triangles = triangles;
-            parcelMesh.normals = normals;
-            parcelMesh.UploadMeshData(true);
-
-            return parcelMesh;
         }
 
         private static NativeArray<int4> CreateMagicPattern()
@@ -161,15 +89,15 @@ namespace Decentraland.Terrain
             magicPattern[4] = int4(1, 1, 2, 0);
             magicPattern[5] = int4(0, 1, 1, 0);
             magicPattern[6] = int4(-1, 1, 1, 0);
-            magicPattern[7] = int4(-2, 1, 2, 90);
-            magicPattern[8] = int4(-2, 0, 1, 90);
-            magicPattern[9] = int4(-2, -1, 1, 90);
+            magicPattern[7] = int4(-2, 1, 2, -90);
+            magicPattern[8] = int4(-2, 0, 1, -90);
+            magicPattern[9] = int4(-2, -1, 1, -90);
             magicPattern[10] = int4(-2, -2, 2, 180);
             magicPattern[11] = int4(-1, -2, 1, 180);
             magicPattern[12] = int4(0, -2, 1, 180);
-            magicPattern[13] = int4(1, -2, 2, 270);
-            magicPattern[14] = int4(1, -1, 1, 270);
-            magicPattern[15] = int4(1, 0, 1, 270);
+            magicPattern[13] = int4(1, -2, 2, 90);
+            magicPattern[14] = int4(1, -1, 1, 90);
+            magicPattern[15] = int4(1, 0, 1, 90);
 
             return magicPattern;
         }
@@ -253,6 +181,7 @@ namespace Decentraland.Terrain
 
             Profiler.BeginSample("RenderTerrain");
 
+            var groundInstanceCounts = new NativeArray<int>(groundMeshes.Length, Allocator.TempJob);
             var groundTransforms = new NativeList<Matrix4x4>(groundInstanceCapacity, Allocator.TempJob);
 
             var generateGroundJob = new GenerateGroundJob()
@@ -264,7 +193,8 @@ namespace Decentraland.Terrain
                 clipBounds = clipBounds,
                 clipPlanes = clipPlanes,
                 magicPattern = magicPattern,
-                groundTransforms = groundTransforms
+                instanceCounts = groundInstanceCounts,
+                transforms = groundTransforms
             };
 
             JobHandle generateGround = generateGroundJob.Schedule();
@@ -433,8 +363,10 @@ namespace Decentraland.Terrain
 #endif
 
             RenderGround(renderParams, groundTransforms.AsArray()
-                .GetSubArray(0, min(groundTransforms.Length, groundTransforms.Capacity)));
+                .GetSubArray(0, min(groundTransforms.Length, groundTransforms.Capacity)),
+                groundInstanceCounts);
 
+            groundInstanceCounts.Dispose();
             groundTransforms.Dispose();
 
             if (renderTreesAndDetail)
@@ -514,15 +446,28 @@ namespace Decentraland.Terrain
             }
         }
 
-        private void RenderGround(RenderParams renderParams, NativeArray<Matrix4x4> instanceData)
+        private void RenderGround(RenderParams renderParams, NativeArray<Matrix4x4> instanceData,
+            NativeArray<int> instanceCounts)
         {
             if (instanceData.Length == 0)
                 return;
 
+            int startInstance = 0;
             renderParams.material = material;
             renderParams.shadowCastingMode = ShadowCastingMode.On;
 
-            Graphics.RenderMeshInstanced(renderParams, groundMesh, 0, instanceData);
+            for (int meshIndex = 0; meshIndex < groundMeshes.Length; meshIndex++)
+            {
+                int instanceCount = instanceCounts[meshIndex];
+
+                if (instanceCount == 0)
+                    continue;
+
+                Graphics.RenderMeshInstanced(renderParams, groundMeshes[meshIndex], 0, instanceData,
+                    instanceCount, startInstance);
+
+                startInstance += instanceCount;
+            }
         }
 
         private void RenderTrees(RenderParams renderParams, NativeArray<Matrix4x4> instanceData,
@@ -574,22 +519,24 @@ namespace Decentraland.Terrain
             public MinMaxAABB clipBounds;
             [ReadOnly] public NativeArray<ClipPlane> clipPlanes;
             [ReadOnly] public NativeArray<int4> magicPattern;
-            public NativeList<Matrix4x4> groundTransforms;
+            public NativeArray<int> instanceCounts;
+            public NativeList<Matrix4x4> transforms;
 
             public void Execute()
             {
                 int2 origin = (PositionToParcel(cameraPosition) + 1) & ~1;
                 int scale = (int)(cameraPosition.y / parcelSize) + 1;
+                var instances = new NativeList<GroundInstance>(transforms.Length, Allocator.Temp);
 
                 for (int i = 0; i < 4; i++)
-                    TryGenerateGround(origin, magicPattern[i].xy, scale);
+                    TryGenerateGround(origin, magicPattern[i], scale, instances);
 
                 while (true)
                 {
                     bool outOfBounds = true;
 
                     for (int i = 4; i < 16; i++)
-                        if (TryGenerateGround(origin, magicPattern[i].xy, scale))
+                        if (TryGenerateGround(origin, magicPattern[i], scale, instances))
                             outOfBounds = false;
 
                     if (outOfBounds)
@@ -597,6 +544,36 @@ namespace Decentraland.Terrain
 
                     scale *= 2;
                 }
+
+                instances.Sort();
+
+                if (transforms.Capacity < instances.Length)
+                    transforms.Capacity = instances.Length;
+
+                int instanceCount = 0;
+                int meshIndex = 0;
+
+                for (int instanceIndex = 0; instanceIndex < instances.Length; instanceIndex++)
+                {
+                    GroundInstance instance = instances[instanceIndex];
+
+                    if (meshIndex < instance.meshIndex)
+                    {
+                        instanceCounts[meshIndex] = instanceCount;
+                        meshIndex = instance.meshIndex;
+                        instanceCount = 0;
+                    }
+
+                    instanceCount++;
+
+                    transforms.AddNoResize(Matrix4x4.TRS(
+                        new Vector3(instance.positionXZ.x, 0f, instance.positionXZ.y),
+                        Quaternion.Euler(0f, instance.rotationY, 0f),
+                        new Vector3(instance.scale, instance.scale, instance.scale)));
+                }
+
+                instanceCounts[meshIndex] = instanceCount;
+                instances.Dispose();
             }
 
             private int2 PositionToParcel(float3 value)
@@ -604,17 +581,23 @@ namespace Decentraland.Terrain
                 return (int2)round(value.xz * (1f / parcelSize) - 0.5f);
             }
 
-            private bool TryGenerateGround(int2 origin, int2 parcel, int scale)
+            private bool TryGenerateGround(int2 origin, int4 magic, int scale,
+                NativeList<GroundInstance> instances)
             {
-                int2 min = (origin + parcel * scale) * parcelSize;
+                int2 min = (origin + magic.xy * scale) * parcelSize;
                 int2 max = min + scale * parcelSize;
                 var bounds = new MinMaxAABB(float3(min.x, 0f, min.y), float3(max.x, maxHeight, max.y));
 
                 if (!OverlapsClipVolume(bounds, clipBounds, clipPlanes))
                     return false;
 
-                groundTransforms.Add(Matrix4x4.TRS(new Vector3(min.x, 0f, min.y), Quaternion.identity,
-                    Vector3.one * scale));
+                instances.Add(new GroundInstance()
+                {
+                    meshIndex = magic.z,
+                    positionXZ = bounds.Center.xz,
+                    rotationY = magic.w,
+                    scale = scale
+                });
 
                 return true;
             }
@@ -864,6 +847,16 @@ namespace Decentraland.Terrain
             public float maxScaleXZ;
             public float minScaleY;
             public float maxScaleY;
+        }
+
+        private struct GroundInstance : IComparable<GroundInstance>
+        {
+            public int meshIndex;
+            public float2 positionXZ;
+            public float rotationY;
+            public float scale;
+
+            public int CompareTo(GroundInstance other) => meshIndex - other.meshIndex;
         }
 
         private struct TreeInstance : IComparable<TreeInstance>

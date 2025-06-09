@@ -1,5 +1,4 @@
 using UnityEditor;
-using UnityEngine;
 
 namespace Decentraland.Terrain
 {
@@ -11,10 +10,6 @@ namespace Decentraland.Terrain
             base.OnInspectorGUI();
 
             var target = (TerrainRenderer)this.target;
-
-            EditorGUI.BeginDisabledGroup(true);
-            EditorGUILayout.ObjectField("Ground Mesh", target.GroundMesh, typeof(Mesh), target);
-            EditorGUI.EndDisabledGroup();
 
             EditorGUILayout.LabelField("Ground Instance Count", target.GroundInstanceCount.ToString());
             EditorGUILayout.LabelField("Tree Instance Count", target.TreeInstanceCount.ToString());
