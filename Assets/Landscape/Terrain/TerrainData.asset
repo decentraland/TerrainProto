@@ -12,11 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f3afcc483b22f184c8187c328ac1576f, type: 3}
   m_Name: TerrainData
   m_EditorClassIdentifier: 
+  randomSeed: 9473297
   parcelSize: 16
-  terrainSize: 300
+  bounds:
+    x: -150
+    y: -150
+    width: 314
+    height: 309
   maxHeight: 40
-  seed: 9473297
-  treeDensity: 0.15
+  treesPerParcel: 0.15
   treePrototypes:
   - source: {fileID: 2214953459268991292, guid: 46ba147d6eb053147b59c469dd34425f, type: 3}
     collider: {fileID: 7013496733605040723, guid: dcca3898bf9ce4a42ad171cb4313e6fa, type: 3}

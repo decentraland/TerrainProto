@@ -12,18 +12,18 @@ namespace Decentraland.Terrain
     [CreateAssetMenu(menuName = "Decentraland/Terrain/Terrain Data")]
     public sealed class TerrainData : ScriptableObject
     {
+        public int randomSeed = 1;
         public int parcelSize = 16;
-        public int terrainSize;
+        public RectInt bounds;
         public float maxHeight;
-        public int seed = 1;
-        [Range(0f, 1f)] public float treeDensity;
+        public float treesPerParcel;
         public TreePrototype[] treePrototypes;
         public DetailPrototype[] detailPrototypes;
 
         private void OnValidate()
         {
-            if (seed < 1)
-                seed = 1;
+            if (randomSeed < 1)
+                randomSeed = 1;
         }
 
         public static void LoadOccupancyMap(out Texture2D texture, out RectInt textureRect)
@@ -50,7 +50,6 @@ namespace Decentraland.Terrain
             texture = new Texture2D(textureRect.width, textureRect.height, TextureFormat.R8, false,
                 true);
 
-            texture.wrapMode = TextureWrapMode.Clamp;
             NativeArray<byte> data = texture.GetRawTextureData<byte>();
 
             // Add a black border so that the terrain height blends to zero at its edges.
@@ -88,7 +87,7 @@ namespace Decentraland.Terrain
 
         public TerrainDataData GetData()
         {
-            return new TerrainDataData(parcelSize, terrainSize, maxHeight, seed, treeDensity,
+            return new TerrainDataData(parcelSize, bounds, maxHeight, randomSeed, treesPerParcel,
                 treePrototypes.Length);
         }
 
@@ -101,17 +100,17 @@ namespace Decentraland.Terrain
     public readonly struct TerrainDataData
     {
         public readonly int parcelSize;
-        public readonly int terrainSize;
+        public readonly RectInt bounds;
         public readonly float maxHeight;
         public readonly int seed;
         public readonly float treeDensity;
         public readonly int treePrototypeCount;
 
-        public TerrainDataData(int parcelSize, int terrainSize, float maxHeight, int seed,
+        public TerrainDataData(int parcelSize, RectInt bounds, float maxHeight, int seed,
             float treeDensity, int treePrototypeCount)
         {
             this.parcelSize = parcelSize;
-            this.terrainSize = terrainSize;
+            this.bounds = bounds;
             this.maxHeight = maxHeight;
             this.seed = seed;
             this.treeDensity = treeDensity;
@@ -126,10 +125,8 @@ namespace Decentraland.Terrain
 
         public Random GetRandom(int2 parcel)
         {
-            int terrainHalfSize = terrainSize / 2;
-
             return new Random(Noise.lowbias32((uint)(
-                (parcel.y + terrainHalfSize) * terrainSize + parcel.x + terrainHalfSize + seed)));
+                (parcel.y - bounds.y) * bounds.width + parcel.x - bounds.x + seed)));
         }
 
         public bool NextTree(int2 parcel, ref Random random, out float3 position, out float rotationY,

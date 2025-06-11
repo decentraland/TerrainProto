@@ -1,10 +1,8 @@
 using System;
-using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Mathematics.Geometry;
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
@@ -19,12 +17,9 @@ namespace Decentraland.Terrain
     {
         [SerializeField] private TerrainData terrainData;
         [SerializeField] private Material material;
-        [SerializeField] private float detailDistance = 200;
         [SerializeField] private bool renderTreesAndDetail = true;
+        [SerializeField] private float detailDistance = 200;
         [SerializeField] private Mesh[] groundMeshes;
-
-        private Bounds bounds;
-        private NativeArray<int4> magicPattern;
 
         // Increase these numbers if you see the terrain renderer complain about them in the console.
         private int groundInstanceCapacity = 80;
@@ -33,10 +28,12 @@ namespace Decentraland.Terrain
 
         private readonly Vector3[] clipCorners =
         {
-            new(-1f, -1f, 0f), new(-1f, -1f, 1f),
-            new(-1f, 1f, 0f), new(-1f, 1f, 1f), new(1f, -1f, 0f), new(1f, -1f, 1f), new(1f, 1f, 0f),
-            new(1f, 1f, 1f)
+            new(-1f, -1f, 0f), new(-1f, -1f, 1f), new(-1f, 1f, 0f), new(-1f, 1f, 1f), new(1f, -1f, 0f),
+            new(1f, -1f, 1f), new(1f, 1f, 0f), new(1f, 1f, 1f)
         };
+
+        private static readonly int terrainBoundsId = Shader.PropertyToID("_TerrainBounds");
+        private NativeArray<int4> magicPattern;
 
 #if UNITY_EDITOR
         public int DetailInstanceCount { get; private set; }
@@ -44,28 +41,8 @@ namespace Decentraland.Terrain
         public int TreeInstanceCount { get; private set; }
 #endif
 
-        private void OnValidate()
-        {
-            if (terrainData == null)
-                return;
-
-            int halfSideLength = terrainData.parcelSize * terrainData.terrainSize / 2;
-            Vector3 center = new Vector3(0f, terrainData.maxHeight * 0.5f, 0f);
-            bounds = new Bounds(center, new Vector3(halfSideLength, center.y, halfSideLength));
-
-            if (!magicPattern.IsCreated)
-                magicPattern = CreateMagicPattern();
-        }
-
-        private void OnEnable()
-        {
-            RenderPipelineManager.beginContextRendering += Render;
-        }
-
-        private void OnDisable()
-        {
-            RenderPipelineManager.beginContextRendering -= Render;
-        }
+        private void Update() =>
+            Render();
 
         private void OnDestroy()
         {
@@ -73,14 +50,45 @@ namespace Decentraland.Terrain
                 magicPattern.Dispose();
         }
 
+        private void OnDrawGizmos()
+        {
+            Gizmos.color = Color.green;
+            Bounds bounds = Bounds;
+            Gizmos.DrawWireCube(bounds.center, bounds.size);
+        }
+
+        public Bounds Bounds
+        {
+            get
+            {
+                if (terrainData != null)
+                {
+                    RectInt bounds = terrainData.bounds;
+                    int parcelSize = terrainData.parcelSize;
+                    float maxHeight = terrainData.maxHeight;
+                    Vector2 center = bounds.center * parcelSize;
+                    Vector2Int size = bounds.size * parcelSize;
+
+                    return new Bounds(new Vector3(center.x, maxHeight * 0.5f, center.y),
+                        new Vector3(size.x, maxHeight, size.y));
+                }
+                else
+                {
+                    return default;
+                }
+            }
+        }
+
         private static NativeArray<int4> CreateMagicPattern()
         {
             var magicPattern = new NativeArray<int4>(16, Allocator.Persistent,
                 NativeArrayOptions.UninitializedMemory);
 
-            // x, y are coordinates, z is the mesh to use (0 normal, 1 low res edge piece, 2 low res
-            // corner piece), w is the rotation (0 is corner piece top right or edge piece top, rotate
-            // counter-clockwise)
+            // x and y are relative parcel coordinates, z is the mesh to use (0 is center piece, 1 is
+            // edge piece, and 2 is corner piece), and w is the rotation around the Y axis. Ground
+            // meshes are to be placed in a 2x2 square (items 0 to 3) and then in an ever expanding
+            // concentric rings around that (items 4 to 15), doubling the parcel coordinate values after
+            // every iteration.
 
             magicPattern[0] = int4(0, 0, 0, 0);
             magicPattern[1] = int4(-1, 0, 0, 0);
@@ -120,7 +128,7 @@ namespace Decentraland.Terrain
             return true;
         }
 
-        private void Render(ScriptableRenderContext context, List<Camera> cameras)
+        private void Render()
         {
             if (terrainData == null)
                 return;
@@ -128,9 +136,12 @@ namespace Decentraland.Terrain
             Camera camera;
 
 #if UNITY_EDITOR
+            if (UnityEditor.SceneVisibilityManager.instance.IsHidden(gameObject))
+                return;
+
             if (!Application.isPlaying)
             {
-                SceneView sceneView = SceneView.lastActiveSceneView;
+                var sceneView = UnityEditor.SceneView.lastActiveSceneView;
                 camera = sceneView != null ? sceneView.camera : Camera.main;
             }
             else
@@ -147,7 +158,7 @@ namespace Decentraland.Terrain
             if (cameraPosition.y < 0f)
                 return;
 
-            int parcelSize = terrainData.parcelSize;
+            Bounds bounds = Bounds;
 
             var clipPlanes = new NativeArray<ClipPlane>(6, Allocator.TempJob,
                 NativeArrayOptions.UninitializedMemory);
@@ -181,14 +192,15 @@ namespace Decentraland.Terrain
 
             Profiler.BeginSample("RenderTerrain");
 
+            if (!magicPattern.IsCreated)
+                magicPattern = CreateMagicPattern();
+
             var groundInstanceCounts = new NativeArray<int>(groundMeshes.Length, Allocator.TempJob);
             var groundTransforms = new NativeList<Matrix4x4>(groundInstanceCapacity, Allocator.TempJob);
 
             var generateGroundJob = new GenerateGroundJob()
             {
-                parcelSize = parcelSize,
-                terrainSize = terrainData.terrainSize,
-                maxHeight = terrainData.maxHeight,
+                terrainData = terrainData.GetData(),
                 cameraPosition = cameraPosition,
                 clipBounds = clipBounds,
                 clipPlanes = clipPlanes,
@@ -282,7 +294,6 @@ namespace Decentraland.Terrain
                     cameraPosition = cameraPosition,
                     clipBounds = clipBounds,
                     clipPlanes = clipPlanes,
-                    treeDensity = terrainData.treeDensity,
                     treePrototypes = treePrototypes,
                     treeLods = treeLods,
                     detailPrototypes = detailPrototypes,
@@ -290,7 +301,8 @@ namespace Decentraland.Terrain
                     detailInstances = detailInstances.AsParallelWriter()
                 };
 
-                int parcelCount = terrainData.terrainSize * terrainData.terrainSize;
+                Vector2Int terrainSize = terrainData.bounds.size;
+                int parcelCount = terrainSize.x * terrainSize.y;
 
                 scatterObjects = scatterObjectsJob.Schedule(parcelCount,
                     JobUtility.GetBatchSize(parcelCount));
@@ -363,7 +375,7 @@ namespace Decentraland.Terrain
 #endif
 
             RenderGround(renderParams, groundTransforms.AsArray()
-                .GetSubArray(0, min(groundTransforms.Length, groundTransforms.Capacity)),
+                    .GetSubArray(0, min(groundTransforms.Length, groundTransforms.Capacity)),
                 groundInstanceCounts);
 
             groundInstanceCounts.Dispose();
@@ -452,6 +464,12 @@ namespace Decentraland.Terrain
             if (instanceData.Length == 0)
                 return;
 
+            Vector4 bounds = new Vector4(
+                terrainData.bounds.x, terrainData.bounds.x + terrainData.bounds.width,
+                terrainData.bounds.y, terrainData.bounds.y + terrainData.bounds.height);
+
+            material.SetVector(terrainBoundsId, bounds * terrainData.parcelSize);
+
             int startInstance = 0;
             renderParams.material = material;
             renderParams.shadowCastingMode = ShadowCastingMode.On;
@@ -512,9 +530,7 @@ namespace Decentraland.Terrain
 
         private struct GenerateGroundJob : IJob
         {
-            public int parcelSize;
-            public int terrainSize;
-            public float maxHeight;
+            public TerrainDataData terrainData;
             public float3 cameraPosition;
             public MinMaxAABB clipBounds;
             [ReadOnly] public NativeArray<ClipPlane> clipPlanes;
@@ -525,7 +541,7 @@ namespace Decentraland.Terrain
             public void Execute()
             {
                 int2 origin = (PositionToParcel(cameraPosition) + 1) & ~1;
-                int scale = (int)(cameraPosition.y / parcelSize) + 1;
+                int scale = (int)(cameraPosition.y / terrainData.parcelSize) + 1;
                 var instances = new NativeList<GroundInstance>(transforms.Length, Allocator.Temp);
 
                 for (int i = 0; i < 4; i++)
@@ -533,13 +549,13 @@ namespace Decentraland.Terrain
 
                 while (true)
                 {
-                    bool outOfBounds = true;
+                    bool stop = true;
 
                     for (int i = 4; i < 16; i++)
                         if (TryGenerateGround(origin, magicPattern[i], scale, instances))
-                            outOfBounds = false;
+                            stop = false;
 
-                    if (outOfBounds)
+                    if (stop || scale >= int.MaxValue / 2)
                         break;
 
                     scale *= 2;
@@ -578,18 +594,26 @@ namespace Decentraland.Terrain
 
             private int2 PositionToParcel(float3 value)
             {
-                return (int2)round(value.xz * (1f / parcelSize) - 0.5f);
+                return (int2)floor(value.xz * (1f / terrainData.parcelSize));
             }
 
             private bool TryGenerateGround(int2 origin, int4 magic, int scale,
                 NativeList<GroundInstance> instances)
             {
-                int2 min = (origin + magic.xy * scale) * parcelSize;
-                int2 max = min + scale * parcelSize;
-                var bounds = new MinMaxAABB(float3(min.x, 0f, min.y), float3(max.x, maxHeight, max.y));
+                int2 min = origin + magic.xy * scale;
+                int2 max = min + scale;
+                int parcelSize = terrainData.parcelSize;
+
+                var bounds = new MinMaxAABB(float3(min.x * parcelSize, 0f, min.y * parcelSize),
+                    float3(max.x * parcelSize, terrainData.maxHeight, max.y * parcelSize));
 
                 if (!OverlapsClipVolume(bounds, clipBounds, clipPlanes))
                     return false;
+
+                if (!terrainData.bounds.Overlaps(new RectInt(min.x, min.y, scale, scale)))
+                    // Skip this instance, but keep generating. The case to consider is when the camera
+                    // is far outside the bounds of the terrain.
+                    return true;
 
                 instances.Add(new GroundInstance()
                 {
@@ -688,7 +712,6 @@ namespace Decentraland.Terrain
             public float3 cameraPosition;
             public MinMaxAABB clipBounds;
             [ReadOnly] public NativeArray<ClipPlane> clipPlanes;
-            public float treeDensity;
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreePrototypeData> treePrototypes;
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreeLODData> treeLods;
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<DetailPrototypeData> detailPrototypes;
@@ -698,8 +721,8 @@ namespace Decentraland.Terrain
             public void Execute(int index)
             {
                 int2 parcel = int2(
-                    index % terrainData.terrainSize - terrainData.terrainSize / 2,
-                    index / terrainData.terrainSize - terrainData.terrainSize / 2);
+                    index % terrainData.bounds.width + terrainData.bounds.x,
+                    index / terrainData.bounds.width + terrainData.bounds.y);
 
                 int2 min = parcel * terrainData.parcelSize;
                 int2 max = min + terrainData.parcelSize;
@@ -740,7 +763,9 @@ namespace Decentraland.Terrain
                                 rotationY = rotationY
                             });
                         }
-                        catch (InvalidOperationException) { } // If we run out of space, do nothing.
+                        catch (InvalidOperationException)
+                        {
+                        } // If we run out of space, do nothing.
                     }
                 }
 
@@ -764,7 +789,9 @@ namespace Decentraland.Terrain
                             }
                         }
                     }
-                    catch (InvalidOperationException) { } // If we run out of space, do nothing.
+                    catch (InvalidOperationException)
+                    {
+                    } // If we run out of space, do nothing.
                 }
             }
 

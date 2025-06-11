@@ -148,7 +148,9 @@ Varyings LitPassVertexSimple(Attributes input)
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
     output.heightDerivatives;
-    VertexPositionInputs vertexInput = GetVertexPositionInputs_Mountain(input.positionOS.xyz, output.heightDerivatives);
+
+    VertexPositionInputs vertexInput = GetVertexPositionInputs_Mountain(input.positionOS.xyz,
+        _TerrainBounds, output.heightDerivatives);
 
     float3 normalOS = normalize(float3(output.heightDerivatives.y, 1.0, output.heightDerivatives.w));
     float4 tangentOS = float4(normalize(float3(1.0, output.heightDerivatives.y, 0.0)), 1.0);

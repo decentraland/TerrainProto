@@ -20,10 +20,13 @@ float3 TerrainVertexAdjustment(float3 positionWS, out float4 heightDerivative)
     return positionWS;
 }
 
-VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, out float4 heightDerivative)
+VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 terrainBounds,
+    out float4 heightDerivative)
 {
     VertexPositionInputs input;
     input.positionWS = TransformObjectToWorld(positionOS);
+    input.positionWS.x = clamp(input.positionWS.x, terrainBounds.x, terrainBounds.y);
+    input.positionWS.z = clamp(input.positionWS.z, terrainBounds.z, terrainBounds.w);
     heightDerivative = getHeightAndNormal_int(input.positionWS.xz, _frequency, 0);
     input.positionWS.y += heightDerivative.x * _terrainHeight;
     input.positionVS = TransformWorldToView(input.positionWS);

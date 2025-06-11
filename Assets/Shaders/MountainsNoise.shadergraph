@@ -5,6 +5,9 @@
     "m_Properties": [
         {
             "m_Id": "13c4d1a4e83c405cab94b46035ec6441"
+        },
+        {
+            "m_Id": "95acf9b1d7fa4b7980cd75d24d2e2d4b"
         }
     ],
     "m_Keywords": [],
@@ -47,6 +50,9 @@
         },
         {
             "m_Id": "4e3c324ff759436db184230b96304cd2"
+        },
+        {
+            "m_Id": "a5072e91fe17430296672a8e072171e7"
         }
     ],
     "m_GroupDatas": [],
@@ -162,6 +168,20 @@
                     "m_Id": "6691f11b5bdc4b6496b65c08fdb08224"
                 },
                 "m_SlotId": 2
+            }
+        },
+        {
+            "m_OutputSlot": {
+                "m_Node": {
+                    "m_Id": "a5072e91fe17430296672a8e072171e7"
+                },
+                "m_SlotId": 0
+            },
+            "m_InputSlot": {
+                "m_Node": {
+                    "m_Id": "1e43104cb9f74964b7bea1bf617b8cc5"
+                },
+                "m_SlotId": 14
             }
         },
         {
@@ -331,7 +351,7 @@
     "m_Group": {
         "m_Id": ""
     },
-    "m_Name": "MountainsNoise (Custom Function)",
+    "m_Name": "Noise (Custom Function)",
     "m_DrawState": {
         "m_Expanded": true,
         "m_Position": {
@@ -345,6 +365,9 @@
     "m_Slots": [
         {
             "m_Id": "f71130787c4b4d98aee11a2dceb14950"
+        },
+        {
+            "m_Id": "e7f2caf1a3cf4fa1b3c36e565b8eaca8"
         },
         {
             "m_Id": "390e1abf56c84459b643d4398640eca0"
@@ -365,7 +388,7 @@
         "m_SerializableColors": []
     },
     "m_SourceType": 0,
-    "m_FunctionName": "MountainsNoise",
+    "m_FunctionName": "Noise",
     "m_FunctionSource": "3e8cfa8282b14c4eac3bbf24c0aaa804",
     "m_FunctionSourceUsePragmas": true,
     "m_FunctionBody": "Enter function body here..."
@@ -870,6 +893,9 @@
     "m_ChildObjectList": [
         {
             "m_Id": "13c4d1a4e83c405cab94b46035ec6441"
+        },
+        {
+            "m_Id": "95acf9b1d7fa4b7980cd75d24d2e2d4b"
         }
     ]
 }
@@ -992,6 +1018,34 @@
 }
 
 {
+    "m_SGVersion": 1,
+    "m_Type": "UnityEditor.ShaderGraph.Internal.Vector4ShaderProperty",
+    "m_ObjectId": "95acf9b1d7fa4b7980cd75d24d2e2d4b",
+    "m_Guid": {
+        "m_GuidSerialized": "5dfe30bb-d08a-47fd-af6c-d7cef2ff5823"
+    },
+    "m_Name": "TerrainBounds",
+    "m_DefaultRefNameVersion": 1,
+    "m_RefNameGeneratedByDisplayName": "TerrainBounds",
+    "m_DefaultReferenceName": "_TerrainBounds",
+    "m_OverrideReferenceName": "",
+    "m_GeneratePropertyBlock": true,
+    "m_UseCustomSlotLabel": false,
+    "m_CustomSlotLabel": "",
+    "m_DismissedVersion": 0,
+    "m_Precision": 0,
+    "overrideHLSLDeclaration": false,
+    "hlslDeclarationOverride": 0,
+    "m_Hidden": false,
+    "m_Value": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 0.0
+    }
+}
+
+{
     "m_SGVersion": 0,
     "m_Type": "UnityEditor.ShaderGraph.Vector1MaterialSlot",
     "m_ObjectId": "9c720b8c9c0c4d8686c1b78f47d16195",
@@ -1029,6 +1083,42 @@
 
 {
     "m_SGVersion": 0,
+    "m_Type": "UnityEditor.ShaderGraph.PropertyNode",
+    "m_ObjectId": "a5072e91fe17430296672a8e072171e7",
+    "m_Group": {
+        "m_Id": ""
+    },
+    "m_Name": "Property",
+    "m_DrawState": {
+        "m_Expanded": true,
+        "m_Position": {
+            "serializedVersion": "2",
+            "x": -1532.0,
+            "y": 249.5999755859375,
+            "width": 152.800048828125,
+            "height": 33.60003662109375
+        }
+    },
+    "m_Slots": [
+        {
+            "m_Id": "be38d6a8dd4849928782369ccc667c58"
+        }
+    ],
+    "synonyms": [],
+    "m_Precision": 0,
+    "m_PreviewExpanded": true,
+    "m_DismissedVersion": 0,
+    "m_PreviewMode": 0,
+    "m_CustomColors": {
+        "m_SerializableColors": []
+    },
+    "m_Property": {
+        "m_Id": "95acf9b1d7fa4b7980cd75d24d2e2d4b"
+    }
+}
+
+{
+    "m_SGVersion": 0,
     "m_Type": "UnityEditor.ShaderGraph.Vector1MaterialSlot",
     "m_ObjectId": "b343ed897edd4579906397a1f3b87764",
     "m_Id": 4,
@@ -1039,6 +1129,31 @@
     "m_StageCapability": 2,
     "m_Value": 0.0,
     "m_DefaultValue": 0.0,
+    "m_Labels": []
+}
+
+{
+    "m_SGVersion": 0,
+    "m_Type": "UnityEditor.ShaderGraph.Vector4MaterialSlot",
+    "m_ObjectId": "be38d6a8dd4849928782369ccc667c58",
+    "m_Id": 0,
+    "m_DisplayName": "TerrainBounds",
+    "m_SlotType": 1,
+    "m_Hidden": false,
+    "m_ShaderOutputName": "Out",
+    "m_StageCapability": 3,
+    "m_Value": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 0.0
+    },
+    "m_DefaultValue": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 0.0
+    },
     "m_Labels": []
 }
 
@@ -1181,6 +1296,31 @@
     },
     "m_ConversionType": 0,
     "m_Normalize": true
+}
+
+{
+    "m_SGVersion": 0,
+    "m_Type": "UnityEditor.ShaderGraph.Vector4MaterialSlot",
+    "m_ObjectId": "e7f2caf1a3cf4fa1b3c36e565b8eaca8",
+    "m_Id": 14,
+    "m_DisplayName": "TerrainBounds",
+    "m_SlotType": 0,
+    "m_Hidden": false,
+    "m_ShaderOutputName": "TerrainBounds",
+    "m_StageCapability": 3,
+    "m_Value": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 0.0
+    },
+    "m_DefaultValue": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0,
+        "w": 0.0
+    },
+    "m_Labels": []
 }
 
 {

@@ -1,4 +1,5 @@
 using UnityEditor;
+using UnityEngine;
 
 namespace Decentraland.Terrain
 {
@@ -14,6 +15,15 @@ namespace Decentraland.Terrain
             EditorGUILayout.LabelField("Ground Instance Count", target.GroundInstanceCount.ToString());
             EditorGUILayout.LabelField("Tree Instance Count", target.TreeInstanceCount.ToString());
             EditorGUILayout.LabelField("Detail Instance Count", target.DetailInstanceCount.ToString());
+        }
+        
+        private bool HasFrameBounds() =>
+            true;
+
+        private Bounds OnGetFrameBounds()
+        {
+            var target = (TerrainRenderer)this.target;
+            return target.Bounds;
         }
 
         public override bool RequiresConstantRepaint() =>

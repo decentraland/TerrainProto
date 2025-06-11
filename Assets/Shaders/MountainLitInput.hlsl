@@ -14,6 +14,7 @@ CBUFFER_START(UnityPerMaterial)
     half _Cutoff;
     half _Surface;
     half _terrainScale;
+    float4 _TerrainBounds;
     half _terrainHeight;
     int _octaves;
     half _frequency;
@@ -31,6 +32,7 @@ UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
     UNITY_DOTS_INSTANCED_PROP(float , _Cutoff)
     UNITY_DOTS_INSTANCED_PROP(float , _Surface)
     UNITY_DOTS_INSTANCED_PROP(float , _terrainScale)
+    UNITY_DOTS_INSTANCED_PROP(float , _TerrainBounds)
     UNITY_DOTS_INSTANCED_PROP(float , _terrainHeight)
     UNITY_DOTS_INSTANCED_PROP(int ,   _octaves)
     UNITY_DOTS_INSTANCED_PROP(float , _frequency)
@@ -45,6 +47,7 @@ static float4 unity_DOTS_Sampled_EmissionColor;
 static float  unity_DOTS_Sampled_Cutoff;
 static float  unity_DOTS_Sampled_Surface;
 static float  unity_DOTS_Sampled_terrainScale;
+static float4  unity_DOTS_Sampled_TerrainBounds;
 static float  unity_DOTS_Sampled_terrainHeight;
 static int    unity_DOTS_Sampled_octaves;
 static float  unity_DOTS_Sampled_frequency;
@@ -60,6 +63,7 @@ void SetupDOTSSimpleLitMaterialPropertyCaches()
     unity_DOTS_Sampled_Cutoff        = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _Cutoff);
     unity_DOTS_Sampled_Surface       = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _Surface);
     unity_DOTS_Sampled_terrainScale  = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _terrainScale);
+    unity_DOTS_Sampled_terrainScale  = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _TerrainBounds);
     unity_DOTS_Sampled_terrainHeight = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _terrainHeight);
     unity_DOTS_Sampled_octaves       = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(int  , _octaves);
     unity_DOTS_Sampled_frequency     = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _frequency);
@@ -77,6 +81,7 @@ void SetupDOTSSimpleLitMaterialPropertyCaches()
 #define _Cutoff             unity_DOTS_Sampled_Cutoff
 #define _Surface            unity_DOTS_Sampled_Surface
 #define _terrainScale       unity_DOTS_Sampled_terrainScale
+#define _TerrainBounds       unity_DOTS_Sampled_TerrainBounds
 #define _terrainHeight      unity_DOTS_Sampled_terrainHeight
 #define _octaves            unity_DOTS_Sampled_octaves
 #define _frequency          unity_DOTS_Sampled_frequency
