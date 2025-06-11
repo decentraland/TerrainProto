@@ -657,7 +657,7 @@
             "m_Id": "4c3089f669484e5290dc398232307320"
         },
         {
-            "m_Id": "c3e6bf64053b495f9e6bfeb6d205cf4d"
+            "m_Id": "3acd8178c13240588150cc2f013c556d"
         },
         {
             "m_Id": "390e1abf56c84459b643d4398640eca0"
@@ -928,6 +928,24 @@
     },
     "m_Labels": [],
     "m_Space": 0
+}
+
+{
+    "m_SGVersion": 0,
+    "m_Type": "UnityEditor.ShaderGraph.Texture2DInputMaterialSlot",
+    "m_ObjectId": "3acd8178c13240588150cc2f013c556d",
+    "m_Id": 16,
+    "m_DisplayName": "OccupancyMap",
+    "m_SlotType": 0,
+    "m_Hidden": false,
+    "m_ShaderOutputName": "OccupancyMap",
+    "m_StageCapability": 3,
+    "m_BareResource": false,
+    "m_Texture": {
+        "m_SerializedTexture": "",
+        "m_Guid": ""
+    },
+    "m_DefaultType": 0
 }
 
 {
@@ -2245,24 +2263,6 @@
     "m_Value": 0.0,
     "m_DefaultValue": 0.0,
     "m_Labels": []
-}
-
-{
-    "m_SGVersion": 0,
-    "m_Type": "UnityEditor.ShaderGraph.Texture2DInputMaterialSlot",
-    "m_ObjectId": "c3e6bf64053b495f9e6bfeb6d205cf4d",
-    "m_Id": 16,
-    "m_DisplayName": "OccupancyMap",
-    "m_SlotType": 0,
-    "m_Hidden": false,
-    "m_ShaderOutputName": "OccupancyMap",
-    "m_StageCapability": 3,
-    "m_BareResource": false,
-    "m_Texture": {
-        "m_SerializedTexture": "",
-        "m_Guid": ""
-    },
-    "m_DefaultType": 0
 }
 
 {
