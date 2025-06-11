@@ -32,6 +32,7 @@ namespace Decentraland.Terrain
             new(1f, -1f, 1f), new(1f, 1f, 0f), new(1f, 1f, 1f)
         };
 
+        private static readonly int parcelSizeId = Shader.PropertyToID("_ParcelSize");
         private static readonly int terrainBoundsId = Shader.PropertyToID("_TerrainBounds");
         private NativeArray<int4> magicPattern;
 
@@ -468,6 +469,7 @@ namespace Decentraland.Terrain
                 terrainData.bounds.x, terrainData.bounds.x + terrainData.bounds.width,
                 terrainData.bounds.y, terrainData.bounds.y + terrainData.bounds.height);
 
+            material.SetFloat(parcelSizeId, terrainData.parcelSize);
             material.SetVector(terrainBoundsId, bounds * terrainData.parcelSize);
 
             int startInstance = 0;

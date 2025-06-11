@@ -7,7 +7,7 @@ using Random = Unity.Mathematics.Random;
 
 namespace Decentraland.Terrain
 {
-    using Noise = GeoffNoise;
+    using Noise = ConstantNoise;
 
     [CreateAssetMenu(menuName = "Decentraland/Terrain/Terrain Data")]
     public sealed class TerrainData : ScriptableObject
