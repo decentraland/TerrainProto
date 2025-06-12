@@ -8,18 +8,6 @@ namespace Decentraland.Terrain
 {
     public static class GeometryExtensions
     {
-        public static void Clip(ref this MinMaxAABB bounds, Bounds other)
-        {
-            bounds.Min = max(bounds.Min, other.min);
-            bounds.Max = min(bounds.Max, other.max);
-        }
-
-        public static void Clip(ref this MinMaxAABB bounds, MinMaxAABB other)
-        {
-            bounds.Min = max(bounds.Min, other.Min);
-            bounds.Max = min(bounds.Max, other.Max);
-        }
-
         public static float3 GetCorner(this MinMaxAABB bounds, int index)
         {
             switch (index)
@@ -34,11 +22,6 @@ namespace Decentraland.Terrain
                 case 0b111: return bounds.Max;
                 default: throw new ArgumentOutOfRangeException(nameof(index));
             }
-        }
-
-        public static Bounds ToBounds(this MinMaxAABB bounds)
-        {
-            return new Bounds(bounds.Center, bounds.Extents);
         }
 
         public static MinMaxAABB ToMinMaxAABB(this Bounds bounds)
