@@ -96,7 +96,7 @@ namespace Decentraland.Terrain
         public readonly int parcelSize;
         public readonly RectInt bounds;
         public readonly float maxHeight;
-        public readonly NativeArray<byte> occupancyMap;
+        [ReadOnly] public readonly NativeArray<byte> occupancyMap;
         public readonly int2 occupancyMapSize;
         public readonly int seed;
         public readonly float treesPerParcel;
@@ -153,7 +153,7 @@ namespace Decentraland.Terrain
             {
                 position.x = parcel.x * parcelSize + random.NextFloat(parcelSize);
                 position.z = parcel.y * parcelSize + random.NextFloat(parcelSize);
-                position.y = Noise.GetHeight(position.x, position.z);
+                position.y = GetHeight(position.x, position.z);
                 rotationY = random.NextFloat(-180f, 180f);
                 prototypeIndex = random.NextInt(treePrototypeCount);
                 return true;

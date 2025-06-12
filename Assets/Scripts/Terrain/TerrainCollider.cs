@@ -8,7 +8,6 @@ using UnityEngine.Pool;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using static Unity.Mathematics.math;
-using Object = UnityEngine.Object;
 using Random = Unity.Mathematics.Random;
 
 namespace Decentraland.Terrain
@@ -19,34 +18,18 @@ namespace Decentraland.Terrain
 
         private List<ParcelData> freeParcels = new();
         private List<ParcelData> usedParcels = new();
-        private ObjectPool<GameObject>[] treePools;
+        private PrefabInstancePool[] treePools;
 
         private void Awake()
         {
-            var treePrefabs = terrainData.treePrototypes;
-            treePools = new ObjectPool<GameObject>[treePrefabs.Length];
+            treePools = new PrefabInstancePool[terrainData.treePrototypes.Length];
 
-            for (int i = 0; i < treePrefabs.Length; i++)
-            {
-                GameObject colliderPrefab = treePrefabs[i].collider;
-
-                treePools[i] = new ObjectPool<GameObject>(
-                    () =>
-                    {
-                        GameObject instance = Object.Instantiate(colliderPrefab
+            for (int i = 0; i < treePools.Length; i++)
+                treePools[i] = new PrefabInstancePool(terrainData.treePrototypes[i].collider
 #if UNITY_EDITOR
-                            , transform
+                    , transform
 #endif
-                        );
-                        instance.name = colliderPrefab.name;
-                        return instance;
-                    },
-                    go => go.SetActive(true), go => go.SetActive(false), go =>
-                    {
-                        if (go != null)
-                            Object.Destroy(go);
-                    });
-            }
+                );
         }
 
         private void OnDestroy()

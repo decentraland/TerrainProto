@@ -765,9 +765,9 @@ namespace Decentraland.Terrain
                                 rotationY = rotationY
                             });
                         }
-                        catch (InvalidOperationException)
+                        catch (InvalidOperationException) // If we run out of space, do nothing.
                         {
-                        } // If we run out of space, do nothing.
+                        }
                     }
                 }
 
@@ -791,9 +791,9 @@ namespace Decentraland.Terrain
                             }
                         }
                     }
-                    catch (InvalidOperationException)
+                    catch (InvalidOperationException) // If we run out of space, do nothing.
                     {
-                    } // If we run out of space, do nothing.
+                    }
                 }
             }
 
