@@ -731,6 +731,9 @@ namespace Decentraland.Terrain
                     index % terrainData.bounds.width + terrainData.bounds.x,
                     index / terrainData.bounds.width + terrainData.bounds.y);
 
+                if (terrainData.IsOccupied(parcel))
+                    return;
+
                 int2 min = parcel * terrainData.parcelSize;
                 int2 max = min + terrainData.parcelSize;
 

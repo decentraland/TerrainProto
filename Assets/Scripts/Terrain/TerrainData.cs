@@ -7,7 +7,7 @@ using Random = Unity.Mathematics.Random;
 
 namespace Decentraland.Terrain
 {
-    using Noise = ConstantNoise;
+    using Noise = MountainsNoise;
 
     [CreateAssetMenu(menuName = "Decentraland/Terrain/Terrain Data")]
     public sealed class TerrainData : ScriptableObject
@@ -144,6 +144,20 @@ namespace Decentraland.Terrain
         {
             return new Random(Noise.lowbias32((uint)(
                 (parcel.y - bounds.y) * bounds.width + parcel.x - bounds.x + seed)));
+        }
+
+        public bool IsOccupied(int2 parcel)
+        {
+            if (parcel.x < bounds.x || parcel.y < bounds.y)
+                return true;
+
+            Vector2Int max = bounds.max;
+
+            if (parcel.x >= max.x || parcel.y >= max.y)
+                return true;
+
+            int index = (parcel.y - bounds.y + 1) * occupancyMapSize.x + parcel.x - bounds.x + 1;
+            return occupancyMap[index] > 0;
         }
 
         public bool NextTree(int2 parcel, ref Random random, out float3 position, out float rotationY,
