@@ -11,7 +11,7 @@ void Noise_float(float3 PositionIn, float ParcelSize, float4 TerrainBounds, Unit
         1.0 / (TerrainBounds.w - TerrainBounds.z + ParcelSize * 2.0));
 
     float occupancy = SAMPLE_TEXTURE2D_LOD(OccupancyMap, OccupancyMap.samplerstate,
-        (PositionOut.xz - TerrainBounds.xz) * scale, 0.0).r;
+        (PositionOut.xz - TerrainBounds.xz + ParcelSize) * scale, 0.0).r;
 
     // In the "worst case", if occupancy is 0.25, it can mean that the current vertex is on a corner
     // between one occupied parcel and three free ones, and height must be zero.

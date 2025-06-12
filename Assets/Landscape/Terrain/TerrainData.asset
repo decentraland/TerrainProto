@@ -20,6 +20,7 @@ MonoBehaviour:
     width: 314
     height: 309
   maxHeight: 40
+  occupancyMap: {fileID: 2800000, guid: 3fb0d1129424bdb40a89f785c5ec75a8, type: 3}
   treesPerParcel: 0.15
   treePrototypes:
   - source: {fileID: 2214953459268991292, guid: 46ba147d6eb053147b59c469dd34425f, type: 3}
