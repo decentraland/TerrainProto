@@ -1,4 +1,5 @@
 using System;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -530,6 +531,7 @@ namespace Decentraland.Terrain
             }
         }
 
+        [BurstCompile]
         private struct GenerateGroundJob : IJob
         {
             public TerrainDataData terrainData;
@@ -629,6 +631,7 @@ namespace Decentraland.Terrain
             }
         }
 
+        [BurstCompile]
         private struct PrepareDetailRenderListJob : IJob
         {
             public NativeList<DetailInstance> instances;
@@ -668,6 +671,7 @@ namespace Decentraland.Terrain
             }
         }
 
+        [BurstCompile]
         private struct PrepareTreeRenderListJob : IJob
         {
             public NativeList<TreeInstance> instances;
@@ -707,6 +711,7 @@ namespace Decentraland.Terrain
             }
         }
 
+        [BurstCompile]
         private struct ScatterObjectsJob : IJobParallelFor
         {
             public TerrainDataData terrainData;
@@ -756,18 +761,12 @@ namespace Decentraland.Terrain
 
                     if (meshIndex < meshEnd)
                     {
-                        try
+                        treeInstances.TryAddNoResize(new TreeInstance()
                         {
-                            treeInstances.AddNoResize(new TreeInstance()
-                            {
-                                meshIndex = meshIndex,
-                                position = position,
-                                rotationY = rotationY
-                            });
-                        }
-                        catch (InvalidOperationException) // If we run out of space, do nothing.
-                        {
-                        }
+                            meshIndex = meshIndex,
+                            position = position,
+                            rotationY = rotationY
+                        });
                     }
                 }
 
@@ -775,29 +774,28 @@ namespace Decentraland.Terrain
 
                 if (distancesq(bounds.Center, cameraPosition) < detailSqrDistance)
                 {
-                    try
+                    for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
                     {
-                        for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
+                        DetailPrototypeData prototype = detailPrototypes[prototypeIndex];
+
+                        switch (prototype.scatterMode)
                         {
-                            DetailPrototypeData prototype = detailPrototypes[prototypeIndex];
+                            case DetailScatterMode.JitteredGrid:
+                                if (!JitteredGrid(parcel, prototype, prototypeIndex, ref random,
+                                        detailInstances))
+                                {
+                                    goto outOfSpace;
+                                }
 
-                            switch (prototype.scatterMode)
-                            {
-                                case DetailScatterMode.JitteredGrid:
-                                    JitteredGrid(parcel, prototype, prototypeIndex, ref random,
-                                        detailInstances);
-
-                                    break;
-                            }
+                                break;
                         }
                     }
-                    catch (InvalidOperationException) // If we run out of space, do nothing.
-                    {
-                    }
+
+                    outOfSpace: ;
                 }
             }
 
-            private void JitteredGrid(int2 parcel, DetailPrototypeData prototype, int meshIndex,
+            private bool JitteredGrid(int2 parcel, DetailPrototypeData prototype, int meshIndex,
                 ref Random random, NativeList<DetailInstance>.ParallelWriter instances)
             {
                 float invDensity = (float)terrainData.parcelSize / prototype.density;
@@ -820,15 +818,20 @@ namespace Decentraland.Terrain
                     float scaleXZ = random.NextFloat(prototype.minScaleXZ, prototype.maxScaleXZ);
                     float scaleY = random.NextFloat(prototype.minScaleY, prototype.maxScaleY);
 
-                    instances.AddNoResize(new DetailInstance()
+                    DetailInstance instance = new DetailInstance()
                     {
                         meshIndex = meshIndex,
                         position = position,
                         rotationY = rotationY,
                         scaleXZ = scaleXZ,
                         scaleY = scaleY
-                    });
+                    };
+
+                    if (!instances.TryAddNoResize(instance))
+                        return false;
                 }
+
+                return true;
             }
         }
 
