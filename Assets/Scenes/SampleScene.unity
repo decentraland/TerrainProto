@@ -151,7 +151,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   terrainData: {fileID: 11400000, guid: 0ab6e914d370dba43abc414c54cd88b7, type: 2}
   material: {fileID: 2100000, guid: 76f6cda36f33ede4fb8b0f1f360165a7, type: 2}
-  renderTreesAndDetail: 0
+  renderTreesAndDetail: 1
   detailDistance: 200
   groundMeshes:
   - {fileID: 1394718660543912083, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
