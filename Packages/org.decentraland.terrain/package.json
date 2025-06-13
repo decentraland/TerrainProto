@@ -1,0 +1,24 @@
+{
+    "name": "org.decentraland.terrain",
+    "version": "1.0.0",
+    "description": "A terrain implementation where almost everything is derived from random noise.",
+    "displayName": "Decentraland Terrain",
+    "unity": "6000.0",
+    "author": {
+        "name": "Decentraland",
+        "email": "hello@decentraland.org",
+        "url": "https://decentraland.org"
+    },
+    "dependencies": {
+        "com.unity.burst": "1.8.21",
+        "com.unity.collections": "2.5.1",
+        "com.unity.mathematics": "1.3.2",
+        "com.unity.modules.imageconversion": "1.0.0"
+    },
+    "documentationUrl": "https://github.com/decentraland/TerrainProto",
+    "keywords": [
+        "terrain"
+    ],
+    "license": "MIT",
+    "licensesUrl": "https://github.com/decentraland/ClearScript/blob/master/License.txt"
+}

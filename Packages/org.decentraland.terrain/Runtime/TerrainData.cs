@@ -201,7 +201,7 @@ namespace Decentraland.Terrain
             uv = uv * textureSize - 0.5f;
             int2 min = (int2)floor(uv);
 
-            // Praying for Burst to SIMD this. 🙏
+            // A quick prayer for Burst to SIMD this. 🙏
             int4 index = clamp(min.y + int4(1, 1, 0, 0), 0, textureSize.y - 1) * textureSize.x +
                          clamp(min.x + int4(0, 1, 1, 0), 0, textureSize.x - 1);
 

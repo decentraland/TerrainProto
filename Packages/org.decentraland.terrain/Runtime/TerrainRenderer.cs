@@ -309,7 +309,6 @@ namespace Decentraland.Terrain
                 scatterObjects = scatterObjectsJob.Schedule(parcelCount,
                     JobUtility.GetBatchSize(parcelCount));
 
-
                 treeInstanceCounts = new NativeArray<int>(treeMeshCount, Allocator.TempJob);
                 treeTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
 
