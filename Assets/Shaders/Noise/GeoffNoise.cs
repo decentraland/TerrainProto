@@ -362,6 +362,262 @@ namespace Decentraland.Terrain
         }
 
         // ============================================================================
+        // HEIGHT GENERATION USED FOR TEXTURE SETUP
+        // ============================================================================
+
+        // Hash function for pseudorandom values - integer version
+        private static float hash1(uint n)
+        {
+            uint hashed = lowbias32(n);
+            // Convert to float in [0,1] range
+            return (float)hashed / 4294967295.0f; // uint max value
+        }
+
+        private static float SafeHash1(uint n)
+        {
+            uint hashed = lowbias32(n);
+            // Use more stable normalization
+            return (float)hashed * (1.0f / 4294967296.0f); // 2^32
+        }
+
+        private static float hash1(int3 p)
+        {
+            // Combine coordinates using large primes to avoid patterns
+            // Cast to uint to handle negative numbers properly
+            uint n = (uint)p.x + 317u * (uint)p.y + 157u * (uint)p.z;
+            return hash1(n);
+        }
+
+        private static float SafeHash1(int3 p)
+        {
+            // Ensure positive coordinates for consistent hashing
+            uint3 up = uint3(p + 100000); // Offset to ensure positive
+            uint n = up.x + 317u * up.y + 157u * up.z;
+            return SafeHash1(n);
+        }
+
+        // More stable coordinate quantization
+        private static int3 SafeQuantize(float3 x, float scale)
+        {
+            // Add small epsilon to avoid edge cases
+            float3 scaled = x * scale + 0.0001f;
+            // Use round instead of floor for more stable behavior
+            return int3(round(scaled));
+        }
+
+        // Returns 4D vector: (noise_value, derivative_x, derivative_y, derivative_z)
+        // Modified to work with integer coordinates (centimeters)
+        private static float4 noised_ts(float3 x)
+        {
+            // Quantize to centimeters and convert to int
+            int3 p = (int3)floor(x * 100.0f);
+            float3 w = frac(x * 100.0f);
+
+            // Quintic interpolation function and its derivative
+            float3 u = w * w * w * (w * (w * 6.0f - 15.0f) + 10.0f);
+            float3 du = 30.0f * w * w * (w * (w - 2.0f) + 1.0f);
+
+            // Sample random values at 8 corners using integer hash
+            float a = hash1(p + int3(0, 0, 0));
+            float b = hash1(p + int3(1, 0, 0));
+            float c = hash1(p + int3(0, 1, 0));
+            float d = hash1(p + int3(1, 1, 0));
+            float e = hash1(p + int3(0, 0, 1));
+            float f = hash1(p + int3(1, 0, 1));
+            float g = hash1(p + int3(0, 1, 1));
+            float h = hash1(p + int3(1, 1, 1));
+
+            // Compute interpolation coefficients (exactly as in Quilez code)
+            float k0 = a;
+            float k1 = b - a;
+            float k2 = c - a;
+            float k3 = e - a;
+            float k4 = a - b - c + d;
+            float k5 = a - c - e + g;
+            float k6 = a - b - e + f;
+            float k7 = -a + b + c - d + e - f - g + h;
+
+            // Compute noise value (remapped to [-1,1] range)
+            float noiseValue = k0 + k1 * u.x + k2 * u.y + k3 * u.z +
+                               k4 * u.x * u.y + k5 * u.y * u.z + k6 * u.z * u.x +
+                               k7 * u.x * u.y * u.z;
+            noiseValue = -1.0f + 2.0f * noiseValue;  // Remap [0,1] to [-1,1]
+
+            // Compute analytical derivatives - need to scale by 100 since we're working in centimeter space
+            float3 derivative = 2.0f * du * 100.0f * float3(
+                k1 + k4 * u.y + k6 * u.z + k7 * u.y * u.z,
+                k2 + k5 * u.z + k4 * u.x + k7 * u.z * u.x,
+                k3 + k6 * u.x + k5 * u.y + k7 * u.x * u.y
+            );
+
+            return float4(noiseValue, derivative);
+        }
+
+        // Fractal Brownian Motion with analytical derivatives - integer version
+        private static float4 fbm_ts(float3 x, int numOctaves)
+        {
+            float f = 1.92f;  // Frequency multiplier per octave
+            float s = 0.5f;   // Amplitude multiplier per octave
+            float a = 0.0f;   // Accumulated value
+            float b = 0.5f;   // Current amplitude
+            float3 d = float3(0, 0, 0);  // Accumulated derivatives
+
+            // Transform matrix per octave (starts as identity)
+            float3x3 m = float3x3(1.0f, 0.0f, 0.0f,
+                                  0.0f, 1.0f, 0.0f,
+                                  0.0f, 0.0f, 1.0f);
+
+            // Rotation matrices for octaves (from Quilez code)
+            float3x3 m3 = float3x3(  0.00f,  0.80f,  0.60f,
+                                    -0.80f,  0.36f, -0.48f,
+                                    -0.60f, -0.48f,  0.64f);
+
+            float3x3 m3i = float3x3(  0.00f, -0.80f, -0.60f,
+                                      0.80f,  0.36f, -0.48f,
+                                      0.60f, -0.48f,  0.64f);
+
+            // Clamp octaves to prevent infinite loops
+            numOctaves = min(numOctaves, 8);
+
+            for (int i = 0; i < numOctaves; i++)
+            {
+                float4 n = noised_ts(x);
+
+                a += b * n.x;                    // Accumulate values
+                d += b * mul(n.yzw, m);         // Accumulate derivatives with proper transform
+
+                b *= s;                         // Reduce amplitude
+                x = mul(x, m3) * f;            // Transform coordinates for next octave
+                m = mul(m, m3i) * f;           // Update derivative transform matrix
+            }
+
+            return float4(a, d);
+        }
+
+        // Deterministic noise function
+        private static float4 DeterministicNoise(float3 x)
+        {
+            // Use consistent quantization
+            const float SCALE = 100.0f;
+            int3 p = SafeQuantize(x, SCALE);
+            float3 w = frac(x * SCALE + 0.0001f); // Small epsilon for stability
+
+            // Ensure w is in [0,1] range
+            w = clamp(w, 0.0f, 1.0f);
+
+            // More stable quintic interpolation
+            float3 u = w * w * w * (w * (w * 6.0f - 15.0f) + 10.0f);
+            float3 du = 30.0f * w * w * (w * (w - 2.0f) + 1.0f);
+
+            // Sample with consistent hashing
+            float a = SafeHash1(p + int3(0, 0, 0));
+            float b = SafeHash1(p + int3(1, 0, 0));
+            float c = SafeHash1(p + int3(0, 1, 0));
+            float d = SafeHash1(p + int3(1, 1, 0));
+            float e = SafeHash1(p + int3(0, 0, 1));
+            float f = SafeHash1(p + int3(1, 0, 1));
+            float g = SafeHash1(p + int3(0, 1, 1));
+            float h = SafeHash1(p + int3(1, 1, 1));
+
+            // Trilinear interpolation coefficients
+            float k0 = a;
+            float k1 = b - a;
+            float k2 = c - a;
+            float k3 = e - a;
+            float k4 = a - b - c + d;
+            float k5 = a - c - e + g;
+            float k6 = a - b - e + f;
+            float k7 = -a + b + c - d + e - f - g + h;
+
+            // Compute noise value
+            float noiseValue = k0 + k1 * u.x + k2 * u.y + k3 * u.z +
+                               k4 * u.x * u.y + k5 * u.y * u.z + k6 * u.z * u.x +
+                               k7 * u.x * u.y * u.z;
+
+            // Remap to [-1,1] with stable math
+            noiseValue = mad(noiseValue, 2.0f, -1.0f);
+
+            // Compute derivatives with consistent scaling
+            float3 derivative = 2.0f * du * SCALE * float3(
+                k1 + k4 * u.y + k6 * u.z + k7 * u.y * u.z,
+                k2 + k5 * u.z + k4 * u.x + k7 * u.z * u.x,
+                k3 + k6 * u.x + k5 * u.y + k7 * u.x * u.y
+            );
+
+            return float4(noiseValue, derivative);
+        }
+
+        // Simplified FBM that avoids matrix accumulation issues
+        private static float4 StableFBM(float3 x, int numOctaves)
+        {
+            float frequency = 1.92f;
+            float amplitude = 0.5f;
+            float value = 0.0f;
+            float3 derivative = float3(0.0f, 0.0f, 0.0f);
+
+            #if SHADER_TARGET
+                // Pre-computed rotation matrices to avoid accumulation
+                static const float3x3 rotations[8] = {
+                    float3x3(1.00f, 0.00f, 0.00f,  0.00f, 1.00f, 0.00f,  0.00f, 0.00f, 1.00f),
+                    float3x3(0.00f, 0.80f, 0.60f, -0.80f, 0.36f,-0.48f, -0.60f,-0.48f, 0.64f),
+                    float3x3(0.64f,-0.48f,-0.60f, -0.48f, 0.36f, 0.80f, -0.60f, 0.80f, 0.00f),
+                    float3x3(0.00f,-0.80f, 0.60f,  0.80f, 0.36f, 0.48f, -0.60f, 0.48f, 0.64f),
+                    float3x3(0.64f, 0.48f,-0.60f,  0.48f, 0.36f,-0.80f, -0.60f,-0.80f, 0.00f),
+                    float3x3(0.00f, 0.80f,-0.60f, -0.80f, 0.36f, 0.48f,  0.60f, 0.48f, 0.64f),
+                    float3x3(0.64f,-0.48f, 0.60f, -0.48f, 0.36f,-0.80f,  0.60f,-0.80f, 0.00f),
+                    float3x3(0.00f,-0.80f,-0.60f,  0.80f, 0.36f,-0.48f,  0.60f,-0.48f, 0.64f)
+                };
+            #else
+                float3x3[] rotations = new float3x3[8];
+                rotations[0] = new float3x3(1.00f, 0.00f, 0.00f,  0.00f, 1.00f, 0.00f,  0.00f, 0.00f, 1.00f);
+                rotations[1] = new float3x3(0.00f, 0.80f, 0.60f, -0.80f, 0.36f,-0.48f, -0.60f,-0.48f, 0.64f);
+                rotations[2] = new float3x3(0.64f,-0.48f,-0.60f, -0.48f, 0.36f, 0.80f, -0.60f, 0.80f, 0.00f);
+                rotations[3] = new float3x3(0.00f,-0.80f, 0.60f,  0.80f, 0.36f, 0.48f, -0.60f, 0.48f, 0.64f);
+                rotations[4] = new float3x3(0.64f, 0.48f,-0.60f,  0.48f, 0.36f,-0.80f, -0.60f,-0.80f, 0.00f);
+                rotations[5] = new float3x3(0.00f, 0.80f,-0.60f, -0.80f, 0.36f, 0.48f,  0.60f, 0.48f, 0.64f);
+                rotations[6] = new float3x3(0.64f,-0.48f, 0.60f, -0.48f, 0.36f,-0.80f,  0.60f,-0.80f, 0.00f);
+                rotations[7] = new float3x3(0.00f,-0.80f,-0.60f,  0.80f, 0.36f,-0.48f,  0.60f,-0.48f, 0.64f);
+            #endif
+
+            numOctaves = clamp(numOctaves, 1, 8);
+
+            for (int i = 0; i < numOctaves; i++)
+            {
+                // Transform coordinates for this octave
+                float3 p = mul(x, rotations[i]) * pow(frequency, i);
+
+                float4 noise = DeterministicNoise(p);
+
+                float octaveAmplitude = pow(amplitude, i);
+                value += octaveAmplitude * noise.x;
+
+                // Transform derivatives back to original space
+                float3 transformedDerivative = mul(noise.yzw, transpose(rotations[i])) * pow(frequency, i);
+                derivative += octaveAmplitude * transformedDerivative;
+            }
+
+            return float4(value, derivative);
+        }
+
+        // Enhanced terrain function with integer-based hashing
+        private static float4 terrain_ts(float3 pos, float frequency, int octaves)
+        {
+            // Apply frequency scaling
+            float3 p = pos * frequency;
+
+            // Get FBM noise and derivatives
+            float4 noise = fbm_ts(p, octaves);
+            float height = noise.x;
+            float3 derivative = noise.yzw;
+
+            // Scale derivatives properly: if we sample at p*frequency,
+            // derivatives w.r.t. original pos are derivative*frequency
+            derivative *= frequency;
+
+            return float4(height, derivative);
+        }
+
+        // ============================================================================
         // CPU USAGE FUNCTIONS
         // ============================================================================
 

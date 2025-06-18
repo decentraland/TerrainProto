@@ -15,6 +15,9 @@ Shader "DCL/MountainLit"
         _SmoothnessSource("Smoothness Source", Float) = 0.0
         _SpecularHighlights("Specular Highlights", Float) = 1.0
 
+        _HeightMap("HeightMap", 2D) = "white" {}
+        _UseHeightMap("Use HeightMap", Integer) = 0
+
         _terrainScale("Terrain Scale", Float) = 1.0      // Horizontal scale of terrain (e.g., 100.0)
         _TerrainBounds("Terrain Bounds", Vector) = (0.0, 0.0, 0.0, 0.0) // xmin, xmax, zmin, zmax
         _terrainHeight("Terrain Height", Float) = 10     // Maximum height displacement (e.g., 50.0)

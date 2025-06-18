@@ -21,6 +21,7 @@ CBUFFER_START(UnityPerMaterial)
     float _sandThreshold;
     float _sandSoftness;
     float _sandScale;
+    int _UseHeightMap;
     UNITY_TEXTURE_STREAMING_DEBUG_VARS;
 CBUFFER_END
 
@@ -39,37 +40,40 @@ UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
     UNITY_DOTS_INSTANCED_PROP(float, _sandThreshold)
     UNITY_DOTS_INSTANCED_PROP(float, _sandSoftness)
     UNITY_DOTS_INSTANCED_PROP(float, _sandScale)
+    UNITY_DOTS_INSTANCED_PROP(int, _UseHeightMap)
 UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
 
-static float4 unity_DOTS_Sampled_BaseColor;
-static float4 unity_DOTS_Sampled_SpecColor;
-static float4 unity_DOTS_Sampled_EmissionColor;
-static float  unity_DOTS_Sampled_Cutoff;
-static float  unity_DOTS_Sampled_Surface;
-static float  unity_DOTS_Sampled_terrainScale;
-static float4  unity_DOTS_Sampled_TerrainBounds;
-static float  unity_DOTS_Sampled_terrainHeight;
-static int    unity_DOTS_Sampled_octaves;
-static float  unity_DOTS_Sampled_frequency;
-static float  unity_DOTS_Sampled_sandThreshold;
-static float  unity_DOTS_Sampled_sandSoftness;
-static float  unity_DOTS_Sampled_sandScale;
+static float4   unity_DOTS_Sampled_BaseColor;
+static float4   unity_DOTS_Sampled_SpecColor;
+static float4   unity_DOTS_Sampled_EmissionColor;
+static float    unity_DOTS_Sampled_Cutoff;
+static float    unity_DOTS_Sampled_Surface;
+static float    unity_DOTS_Sampled_terrainScale;
+static float4   unity_DOTS_Sampled_TerrainBounds;
+static float    unity_DOTS_Sampled_terrainHeight;
+static int      unity_DOTS_Sampled_octaves;
+static float    unity_DOTS_Sampled_frequency;
+static float    unity_DOTS_Sampled_sandThreshold;
+static float    unity_DOTS_Sampled_sandSoftness;
+static float    unity_DOTS_Sampled_sandScale;
+static int      unity_DOTS_Sampled_UseHeightMap;
 
 void SetupDOTSSimpleLitMaterialPropertyCaches()
 {
-    unity_DOTS_Sampled_BaseColor     = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4 , _BaseColor);
-    unity_DOTS_Sampled_SpecColor     = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4 , _SpecColor);
-    unity_DOTS_Sampled_EmissionColor = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4 , _EmissionColor);
-    unity_DOTS_Sampled_Cutoff        = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _Cutoff);
-    unity_DOTS_Sampled_Surface       = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _Surface);
-    unity_DOTS_Sampled_terrainScale  = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _terrainScale);
-    unity_DOTS_Sampled_terrainScale  = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _TerrainBounds);
-    unity_DOTS_Sampled_terrainHeight = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _terrainHeight);
-    unity_DOTS_Sampled_octaves       = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(int  , _octaves);
-    unity_DOTS_Sampled_frequency     = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _frequency);
-    unity_DOTS_Sampled_sandThreshold = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _sandThreshold);
-    unity_DOTS_Sampled_sandSoftness = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _sandSoftness);
-    unity_DOTS_Sampled_sandScale = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _sandScale);
+    unity_DOTS_Sampled_BaseColor        = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4 , _BaseColor);
+    unity_DOTS_Sampled_SpecColor        = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4 , _SpecColor);
+    unity_DOTS_Sampled_EmissionColor    = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4 , _EmissionColor);
+    unity_DOTS_Sampled_Cutoff           = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _Cutoff);
+    unity_DOTS_Sampled_Surface          = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _Surface);
+    unity_DOTS_Sampled_terrainScale     = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _terrainScale);
+    unity_DOTS_Sampled_terrainScale     = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _TerrainBounds);
+    unity_DOTS_Sampled_terrainHeight    = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _terrainHeight);
+    unity_DOTS_Sampled_octaves          = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(int  , _octaves);
+    unity_DOTS_Sampled_frequency        = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _frequency);
+    unity_DOTS_Sampled_sandThreshold    = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _sandThreshold);
+    unity_DOTS_Sampled_sandSoftness     = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _sandSoftness);
+    unity_DOTS_Sampled_sandScale        = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _sandScale);
+    unity_DOTS_Sampled_UseHeightMap     = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(int, _UseHeightMap);
 }
 
 #undef UNITY_SETUP_DOTS_MATERIAL_PROPERTY_CACHES
@@ -81,18 +85,20 @@ void SetupDOTSSimpleLitMaterialPropertyCaches()
 #define _Cutoff             unity_DOTS_Sampled_Cutoff
 #define _Surface            unity_DOTS_Sampled_Surface
 #define _terrainScale       unity_DOTS_Sampled_terrainScale
-#define _TerrainBounds       unity_DOTS_Sampled_TerrainBounds
+#define _TerrainBounds      unity_DOTS_Sampled_TerrainBounds
 #define _terrainHeight      unity_DOTS_Sampled_terrainHeight
 #define _octaves            unity_DOTS_Sampled_octaves
 #define _frequency          unity_DOTS_Sampled_frequency
 #define _sandThreshold      unity_DOTS_Sampled_sandThreshold
 #define _sandSoftness       unity_DOTS_Sampled_sandSoftness
 #define _sandScale          unity_DOTS_Sampled_sandScale
+#define _UseHeightMap       unity_DOTS_Sampled_UseHeightMap
 
 #endif
 
 TEXTURE2D(_SpecGlossMap);       SAMPLER(sampler_SpecGlossMap);
 TEXTURE2D(_BlendMap);           SAMPLER(sampler_BlendMap);
+TEXTURE2D(_HeightMap);          SAMPLER(sampler_HeightMap);
 
 half4 SampleSpecularSmoothness(float2 uv, half alpha, half4 specColor, TEXTURE2D_PARAM(specMap, sampler_specMap))
 {
