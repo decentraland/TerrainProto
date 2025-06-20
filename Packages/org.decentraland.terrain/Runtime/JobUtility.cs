@@ -4,7 +4,7 @@ namespace Decentraland.Terrain
 {
     public static class JobUtility
     {
-        private static readonly int processorCount = SystemInfo.processorCount;
-        public static int GetBatchSize(int arrayLength) => arrayLength / processorCount + 1;
+        private static readonly int PROCESSOR_COUNT = SystemInfo.processorCount;
+        public static int GetBatchSize(int arrayLength) => arrayLength / PROCESSOR_COUNT + 1;
     }
 }

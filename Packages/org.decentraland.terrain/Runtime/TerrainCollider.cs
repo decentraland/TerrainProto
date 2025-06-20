@@ -16,8 +16,8 @@ namespace Decentraland.Terrain
     {
         [SerializeField] private TerrainData terrainData;
 
-        private List<ParcelData> freeParcels = new();
-        private List<ParcelData> usedParcels = new();
+        private readonly List<ParcelData> freeParcels = new();
+        private readonly List<ParcelData> usedParcels = new();
         private PrefabInstancePool[] treePools;
 
         private void Awake()

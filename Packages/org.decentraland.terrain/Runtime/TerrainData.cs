@@ -13,85 +13,46 @@ namespace Decentraland.Terrain
     public sealed class TerrainData : ScriptableObject
     {
         public int randomSeed = 1;
+        public Material material;
         public int parcelSize = 16;
         public RectInt bounds;
         public float maxHeight;
         public Texture2D occupancyMap;
-        public float treesPerParcel;
-        public TreePrototype[] treePrototypes;
-        public DetailPrototype[] detailPrototypes;
+        public float treesPerParcel = 0.15f;
+        public float detailDistance = 200;
+        public bool renderGround = true;
+        public bool renderTreesAndDetail = true;
+        [SerializeField] internal int groundInstanceCapacity = 80;
+        [SerializeField] internal int treeInstanceCapacity = 3000;
+        [SerializeField] internal int detailInstanceCapacity = 40000;
+        [SerializeField] private Mesh groundMeshMiddle;
+        [SerializeField] private Mesh groundMeshEdge;
+        [SerializeField] private Mesh groundMeshCorder;
+        [SerializeField] internal TreePrototype[] treePrototypes;
+        [SerializeField] internal DetailPrototype[] detailPrototypes;
 
-        private void OnValidate()
-        {
-            if (randomSeed < 1)
-                randomSeed = 1;
-        }
-
-        public TerrainDataData GetData()
+        internal TerrainDataData GetData()
         {
             return new TerrainDataData(parcelSize, bounds, maxHeight, occupancyMap, randomSeed,
                 treesPerParcel, treePrototypes.Length);
         }
 
-        public static void LoadOccupancyMap(out Texture2D texture, out RectInt textureRect)
+        internal Mesh GetGroundMesh(int index)
         {
-            var worldManifestAsset = Resources.Load<TextAsset>("WorldManifest");
-            var worldManifest = JsonUtility.FromJson<WorldManifest>(worldManifestAsset.text);
-
-            var parcels = new int2[worldManifest.empty.Length];
-            int2 minParcel = int2(int.MaxValue, int.MaxValue);
-            int2 maxParcel = int2(int.MinValue, int.MinValue);
-
-            static void GetParcels(string[] parcelStrs, ref int2 minParcel, ref int2 maxParcel,
-                int2[] parcels)
+            switch (index)
             {
-                for (int i = 0; i < parcelStrs.Length; i++)
-                {
-                    string[] parcelStr = parcelStrs[i].Split(',');
-                    int2 parcel = int2(int.Parse(parcelStr[0]), int.Parse(parcelStr[1]));
-                    minParcel = min(minParcel, parcel);
-                    maxParcel = max(maxParcel, parcel);
-
-                    if (parcels != null)
-                        parcels[i] = parcel;
-                }
+                case 0: return groundMeshMiddle;
+                case 1: return groundMeshEdge;
+                case 2: return groundMeshCorder;
+                default: throw new IndexOutOfRangeException(
+                    $"Ground mesh index {index} is out of range of 0 to {GroundMeshCount - 1}");
             }
-
-            GetParcels(worldManifest.roads, ref minParcel, ref maxParcel, null);
-            GetParcels(worldManifest.occupied, ref minParcel, ref maxParcel, null);
-            GetParcels(worldManifest.empty, ref minParcel, ref maxParcel, parcels);
-
-            // Give the texture a 1 pixel border. These extra pixels shall be colored red (occupied) so
-            // that terrain blends to zero at its edges.
-            textureRect = new(minParcel.x - 1, minParcel.y - 1, maxParcel.x - minParcel.x + 3,
-                maxParcel.y - minParcel.y + 3);
-
-            texture = new Texture2D(textureRect.width, textureRect.height, TextureFormat.R8, false,
-                true);
-
-            NativeArray<byte> data = texture.GetRawTextureData<byte>();
-
-            for (int i = 0; i < data.Length; i++)
-                data[i] = 255;
-
-            for (int i = 0; i < parcels.Length; i++)
-            {
-                int2 parcel = parcels[i];
-                data[(parcel.y - textureRect.y) * textureRect.width + parcel.x - textureRect.x] = 0;
-            }
-
-            texture.Apply(false, false);
         }
 
-        private struct WorldManifest
-        {
-            public string[] roads;
-            public string[] occupied;
-            public string[] empty;
-        }
+        internal int GroundMeshCount => 3;
     }
 
-    public readonly struct TerrainDataData
+    internal readonly struct TerrainDataData
     {
         public readonly int parcelSize;
         public readonly RectInt bounds;
@@ -213,7 +174,7 @@ namespace Decentraland.Terrain
     }
 
     [Serializable]
-    public struct DetailPrototype
+    internal struct DetailPrototype
     {
         public GameObject source;
         public DetailScatterMode scatterMode;
@@ -227,13 +188,13 @@ namespace Decentraland.Terrain
         public Material material;
     }
 
-    public enum DetailScatterMode
+    internal enum DetailScatterMode
     {
         JitteredGrid
     }
 
     [Serializable]
-    public struct TreeLOD
+    internal struct TreeLOD
     {
         public float minScreenSize;
         public Mesh mesh;
@@ -241,7 +202,7 @@ namespace Decentraland.Terrain
     }
 
     [Serializable]
-    public struct TreePrototype
+    internal struct TreePrototype
     {
         public GameObject source;
         public GameObject collider;

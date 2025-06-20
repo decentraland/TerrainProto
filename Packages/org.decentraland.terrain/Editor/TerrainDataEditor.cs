@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Pool;
@@ -14,28 +13,13 @@ namespace Decentraland.Terrain
         {
             base.OnInspectorGUI();
 
-            if (GUILayout.Button("Save Occupancy Map"))
-                SaveOccupancyMap();
-
             if (GUILayout.Button("Update Prototypes from Sources"))
                 UpdatePrototypes();
         }
 
-        private void SaveOccupancyMap()
-        {
-            string path = EditorUtility.SaveFilePanel("Save Occupancy Map", Application.dataPath,
-                "OccupancyMap.png", "png");
-
-            if (path == null)
-                return;
-
-            TerrainData.LoadOccupancyMap(out Texture2D texture, out _);
-            File.WriteAllBytes(path, texture.EncodeToPNG());
-        }
-
         private void UpdatePrototypes()
         {
-            TerrainData target = this.target as TerrainData;
+            TerrainData target = (TerrainData)this.target;
             TreePrototype[] treePrototypes = target.treePrototypes;
 
             for (int i = 0; i < treePrototypes.Length; i++)

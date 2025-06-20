@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: TerrainData
   m_EditorClassIdentifier: 
   randomSeed: 9473297
+  material: {fileID: 2100000, guid: 7e6b9dea3fa74574aa8dc9c031f42a71, type: 2}
   parcelSize: 16
   bounds:
     x: -150
@@ -22,6 +23,15 @@ MonoBehaviour:
   maxHeight: 40
   occupancyMap: {fileID: 2800000, guid: 3fb0d1129424bdb40a89f785c5ec75a8, type: 3}
   treesPerParcel: 0.15
+  detailDistance: 200
+  renderGround: 1
+  renderTreesAndDetail: 1
+  groundInstanceCapacity: 80
+  treeInstanceCapacity: 3000
+  detailInstanceCapacity: 40000
+  groundMeshMiddle: {fileID: 1394718660543912083, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
+  groundMeshEdge: {fileID: 2474922959326173943, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
+  groundMeshCorder: {fileID: -3615330361707025511, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
   treePrototypes:
   - source: {fileID: 2214953459268991292, guid: 46ba147d6eb053147b59c469dd34425f, type: 3}
     collider: {fileID: 7013496733605040723, guid: dcca3898bf9ce4a42ad171cb4313e6fa, type: 3}

@@ -9,7 +9,7 @@ namespace Decentraland.Terrain
         public static unsafe bool TryAddNoResize<T>(this NativeList<T>.ParallelWriter writer, T value)
             where T : unmanaged
         {
-            var length = Interlocked.Increment(ref writer.ListData->m_length);
+            int length = Interlocked.Increment(ref writer.ListData->m_length);
 
             if (length <= writer.ListData->Capacity)
             {
