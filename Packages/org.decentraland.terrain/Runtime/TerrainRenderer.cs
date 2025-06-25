@@ -71,7 +71,7 @@ namespace Decentraland.Terrain
 #else
                 false
 #endif
-                );
+            );
         }
 
         private void OnDrawGizmosSelected()
@@ -148,8 +148,16 @@ namespace Decentraland.Terrain
 #if UNITY_EDITOR
             , TerrainRenderer renderer = null
 #endif
-            )
+        )
         {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (terrainData == null)
+                throw new ArgumentNullException(nameof(terrainData));
+
+            if (camera == null)
+                throw new ArgumentNullException(nameof(camera));
+#endif
+
             float3 cameraPosition = camera.transform.position;
 
             if (cameraPosition.y < 0f)
@@ -189,16 +197,19 @@ namespace Decentraland.Terrain
 
             Profiler.BeginSample("RenderTerrain");
 
+            bool renderGround = terrainData.renderGround && terrainData.groundMaterial != null
+                                                         && terrainData.groundMeshes.Length == 3;
+
             JobHandle generateGround;
             NativeArray<int> groundInstanceCounts;
             NativeList<Matrix4x4> groundTransforms;
 
-            if (terrainData.renderGround)
+            if (renderGround)
             {
                 if (!magicPattern.IsCreated)
                     magicPattern = CreateMagicPattern();
 
-                groundInstanceCounts = new NativeArray<int>(terrainData.GroundMeshCount,
+                groundInstanceCounts = new NativeArray<int>(terrainData.groundMeshes.Length,
                     Allocator.TempJob);
 
                 groundTransforms = new NativeList<Matrix4x4>(terrainData.groundInstanceCapacity,
@@ -224,6 +235,10 @@ namespace Decentraland.Terrain
                 groundTransforms = default;
             }
 
+            bool renderTreesAndDetail = terrainData.renderTreesAndDetail
+                                        && (terrainData.treePrototypes.Length > 0
+                                            || terrainData.detailPrototypes.Length > 0);
+
             JobHandle scatterObjects;
             NativeList<TreeInstance> treeInstances;
             NativeArray<int> treeInstanceCounts;
@@ -234,7 +249,7 @@ namespace Decentraland.Terrain
             JobHandle prepareDetailRenderList;
             NativeList<Matrix4x4> detailTransforms;
 
-            if (terrainData.renderTreesAndDetail)
+            if (renderTreesAndDetail)
             {
                 // Deallocated by ScatterObjectsJob
                 var treePrototypes = new NativeArray<TreePrototypeData>(
@@ -370,7 +385,7 @@ namespace Decentraland.Terrain
             if (!renderToAllCameras)
                 renderParams.camera = camera;
 
-            if (terrainData.renderGround)
+            if (renderGround)
             {
                 generateGround.Complete();
 
@@ -394,7 +409,7 @@ namespace Decentraland.Terrain
                 groundTransforms.Dispose();
             }
 
-            if (terrainData.renderTreesAndDetail)
+            if (renderTreesAndDetail)
             {
                 scatterObjects.Complete();
                 clipPlanes.Dispose();
@@ -438,7 +453,7 @@ namespace Decentraland.Terrain
 
                 detailInstances.Dispose();
 
-                RenderDetails(terrainData, renderParams, detailTransforms.AsArray(),
+                RenderDetail(terrainData, renderParams, detailTransforms.AsArray(),
                     detailInstanceCounts);
 
                 detailInstanceCounts.Dispose();
@@ -448,7 +463,7 @@ namespace Decentraland.Terrain
             Profiler.EndSample();
         }
 
-        private static void RenderDetails(TerrainData terrainData, RenderParams renderParams,
+        private static void RenderDetail(TerrainData terrainData, RenderParams renderParams,
             NativeArray<Matrix4x4> instanceData, NativeArray<int> instanceCounts)
         {
             if (instanceData.Length == 0)
@@ -486,21 +501,21 @@ namespace Decentraland.Terrain
                 terrainData.bounds.x, terrainData.bounds.x + terrainData.bounds.width,
                 terrainData.bounds.y, terrainData.bounds.y + terrainData.bounds.height);
 
-            terrainData.material.SetFloat(PARCEL_SIZE_ID, terrainData.parcelSize);
-            terrainData.material.SetVector(TERRAIN_BOUNDS_ID, bounds * terrainData.parcelSize);
+            terrainData.groundMaterial.SetFloat(PARCEL_SIZE_ID, terrainData.parcelSize);
+            terrainData.groundMaterial.SetVector(TERRAIN_BOUNDS_ID, bounds * terrainData.parcelSize);
 
             int startInstance = 0;
-            renderParams.material = terrainData.material;
+            renderParams.material = terrainData.groundMaterial;
             renderParams.shadowCastingMode = ShadowCastingMode.On;
 
-            for (int meshIndex = 0; meshIndex < terrainData.GroundMeshCount; meshIndex++)
+            for (int meshIndex = 0; meshIndex < terrainData.groundMeshes.Length; meshIndex++)
             {
                 int instanceCount = instanceCounts[meshIndex];
 
                 if (instanceCount == 0)
                     continue;
 
-                Graphics.RenderMeshInstanced(renderParams, terrainData.GetGroundMesh(meshIndex), 0,
+                Graphics.RenderMeshInstanced(renderParams, terrainData.groundMeshes[meshIndex], 0,
                     instanceData, instanceCount, startInstance);
 
                 startInstance += instanceCount;
@@ -659,6 +674,10 @@ namespace Decentraland.Terrain
                 // If NativeList<T>.ParallelWriter runs out of space, the length of the list will exceed
                 // its capacity. This code deals with that.
                 int totalInstanceCount = min(instances.Length, instances.Capacity);
+
+                if (totalInstanceCount == 0)
+                    return;
+
                 instances.AsArray().GetSubArray(0, totalInstanceCount).Sort();
                 transforms.Capacity = totalInstanceCount;
 
@@ -699,6 +718,10 @@ namespace Decentraland.Terrain
                 // If NativeList<T>.ParallelWriter runs out of space, the length of the list will exceed
                 // its capacity. This code deals with that.
                 int totalInstanceCount = min(instances.Length, instances.Capacity);
+
+                if (totalInstanceCount == 0)
+                    return;
+
                 instances.AsArray().GetSubArray(0, totalInstanceCount).Sort();
                 transforms.Capacity = totalInstanceCount;
 
@@ -800,11 +823,8 @@ namespace Decentraland.Terrain
                         switch (prototype.scatterMode)
                         {
                             case DetailScatterMode.JitteredGrid:
-                                if (!JitteredGrid(parcel, prototype, prototypeIndex, ref random,
-                                        detailInstances))
-                                {
+                                if (!JitteredGrid(parcel, prototypeIndex, ref random, detailInstances))
                                     goto outOfSpace;
-                                }
 
                                 break;
                         }
@@ -814,22 +834,20 @@ namespace Decentraland.Terrain
                 }
             }
 
-            private bool JitteredGrid(int2 parcel, DetailPrototypeData prototype, int meshIndex,
+            private bool JitteredGrid(int2 parcel, int meshIndex,
                 ref Random random, NativeList<DetailInstance>.ParallelWriter instances)
             {
-                float invDensity = (float)terrainData.parcelSize / prototype.density;
+                DetailPrototypeData prototype = detailPrototypes[meshIndex];
+                int gridSize = (int)(prototype.density * terrainData.parcelSize);
+                float invGridSize = (float)terrainData.parcelSize / gridSize;
+                float2 corner0 = parcel * terrainData.parcelSize;
 
-                for (int z = 0; z < prototype.density; z++)
-                for (int x = 0; x < prototype.density; x++)
+                for (int z = 0; z < gridSize; z++)
+                for (int x = 0; x < gridSize; x++)
                 {
                     float3 position;
-
-                    position.x = parcel.x * terrainData.parcelSize + x * invDensity
-                                                                   + random.NextFloat(invDensity);
-
-                    position.z = parcel.y * terrainData.parcelSize + z * invDensity
-                                                                   + random.NextFloat(invDensity);
-
+                    position.x = corner0.x + x * invGridSize + random.NextFloat(invGridSize);
+                    position.z = corner0.y + z * invGridSize + random.NextFloat(invGridSize);
                     position.y = terrainData.GetHeight(position.x, position.z);
 
                     float rotationY = random.NextFloat(-180f, 180f);
@@ -893,7 +911,7 @@ namespace Decentraland.Terrain
         private struct DetailPrototypeData
         {
             public DetailScatterMode scatterMode;
-            public int density;
+            public float density;
             public float minScaleXZ;
             public float maxScaleXZ;
             public float minScaleY;

@@ -149,14 +149,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f13968779bf625e4c9139b3a2108e7b4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  terrainData: {fileID: 11400000, guid: 0ab6e914d370dba43abc414c54cd88b7, type: 2}
-  material: {fileID: 2100000, guid: 7e6b9dea3fa74574aa8dc9c031f42a71, type: 2}
-  renderTreesAndDetail: 1
-  detailDistance: 200
-  groundMeshes:
-  - {fileID: 1394718660543912083, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
-  - {fileID: 2474922959326173943, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
-  - {fileID: -3615330361707025511, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
+  terrainData: {fileID: 11400000, guid: cbbf13f888dcb764f90a05c667d07000, type: 2}
 --- !u!4 &248761157
 Transform:
   m_ObjectHideFlags: 0
@@ -184,7 +177,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 88f6f4f663e38a84d8daccd1c147597e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  terrainData: {fileID: 11400000, guid: 0ab6e914d370dba43abc414c54cd88b7, type: 2}
+  terrainData: {fileID: 11400000, guid: cbbf13f888dcb764f90a05c667d07000, type: 2}
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0

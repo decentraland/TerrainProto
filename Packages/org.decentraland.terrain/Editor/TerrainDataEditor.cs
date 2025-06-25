@@ -6,7 +6,7 @@ using Object = UnityEngine.Object;
 
 namespace Decentraland.Terrain
 {
-    [CustomEditor(typeof(TerrainData))]
+    [CustomEditor(typeof(TerrainData), true)]
     public sealed class TerrainDataEditor : Editor
     {
         public override void OnInspectorGUI()
@@ -79,8 +79,8 @@ namespace Decentraland.Terrain
                     LOD lod = lods[j];
                     Renderer renderer = lod.renderers[0];
                     ref TreeLOD treeLod = ref prototype.lods[j];
-                    treeLod.minScreenSize = lod.screenRelativeTransitionHeight;
                     treeLod.mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
+                    treeLod.minScreenSize = lod.screenRelativeTransitionHeight;
                     treeLod.materials = renderer.sharedMaterials;
                 }
             }

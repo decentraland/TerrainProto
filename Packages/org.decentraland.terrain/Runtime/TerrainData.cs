@@ -1,4 +1,5 @@
 using System;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -7,13 +8,10 @@ using Random = Unity.Mathematics.Random;
 
 namespace Decentraland.Terrain
 {
-    using Noise = MountainsNoise;
-
-    [CreateAssetMenu(menuName = "Decentraland/Terrain/Terrain Data")]
-    public sealed class TerrainData : ScriptableObject
+    public abstract class TerrainData : ScriptableObject
     {
         public int randomSeed = 1;
-        public Material material;
+        public Material groundMaterial;
         public int parcelSize = 16;
         public RectInt bounds;
         public float maxHeight;
@@ -25,31 +23,33 @@ namespace Decentraland.Terrain
         [SerializeField] internal int groundInstanceCapacity = 80;
         [SerializeField] internal int treeInstanceCapacity = 3000;
         [SerializeField] internal int detailInstanceCapacity = 40000;
-        [SerializeField] private Mesh groundMeshMiddle;
-        [SerializeField] private Mesh groundMeshEdge;
-        [SerializeField] private Mesh groundMeshCorder;
+
+        [SerializeField, EnumIndexedArray(typeof(GroundMeshType))]
+        internal Mesh[] groundMeshes;
+
         [SerializeField] internal TreePrototype[] treePrototypes;
         [SerializeField] internal DetailPrototype[] detailPrototypes;
 
+        protected FunctionPointer<GetHeightDelegate> getHeight;
+        protected FunctionPointer<GetNormalDelegate> getNormal;
+
+        protected abstract void CompileNoiseFunctions();
+
         internal TerrainDataData GetData()
         {
+            if (!getHeight.IsCreated)
+                CompileNoiseFunctions();
+
             return new TerrainDataData(parcelSize, bounds, maxHeight, occupancyMap, randomSeed,
-                treesPerParcel, treePrototypes.Length);
+                treesPerParcel, treePrototypes.Length, getHeight, getNormal);
         }
 
-        internal Mesh GetGroundMesh(int index)
+        private enum GroundMeshType : int
         {
-            switch (index)
-            {
-                case 0: return groundMeshMiddle;
-                case 1: return groundMeshEdge;
-                case 2: return groundMeshCorder;
-                default: throw new IndexOutOfRangeException(
-                    $"Ground mesh index {index} is out of range of 0 to {GroundMeshCount - 1}");
-            }
+            Middle,
+            Edge,
+            Corner
         }
-
-        internal int GroundMeshCount => 3;
     }
 
     internal readonly struct TerrainDataData
@@ -57,39 +57,68 @@ namespace Decentraland.Terrain
         public readonly int parcelSize;
         public readonly RectInt bounds;
         public readonly float maxHeight;
-        [ReadOnly] public readonly NativeArray<byte> occupancyMap;
-        public readonly int2 occupancyMapSize;
-        public readonly int seed;
-        public readonly float treesPerParcel;
-        public readonly int treePrototypeCount;
+        [ReadOnly] private readonly NativeArray<byte> occupancyMap;
+        private readonly int2 occupancyMapSize;
+        private readonly int randomSeed;
+        private readonly float treesPerParcel;
+        private readonly int treePrototypeCount;
+        private readonly FunctionPointer<GetHeightDelegate> getHeight;
+        private readonly FunctionPointer<GetNormalDelegate> getNormal;
+
+        private static NativeArray<byte> emptyOccupancyMap;
 
         public TerrainDataData(int parcelSize, RectInt bounds, float maxHeight, Texture2D occupancyMap,
-            int seed, float treesPerParcel, int treePrototypeCount)
+            int randomSeed, float treesPerParcel, int treePrototypeCount,
+            FunctionPointer<GetHeightDelegate> getHeight, FunctionPointer<GetNormalDelegate> getNormal)
         {
             this.parcelSize = parcelSize;
             this.bounds = bounds;
             this.maxHeight = maxHeight;
-            this.occupancyMap = occupancyMap.GetRawTextureData<byte>();
-            occupancyMapSize = int2(occupancyMap.width, occupancyMap.height);
-            this.seed = seed;
+            this.randomSeed = randomSeed;
             this.treesPerParcel = treesPerParcel;
             this.treePrototypeCount = treePrototypeCount;
+            this.getHeight = getHeight;
+            this.getNormal = getNormal;
+
+            if (occupancyMap != null)
+            {
+                this.occupancyMap = occupancyMap.GetRawTextureData<byte>();
+                occupancyMapSize = int2(occupancyMap.width, occupancyMap.height);
+            }
+            else
+            {
+                if (!emptyOccupancyMap.IsCreated)
+                    emptyOccupancyMap = new NativeArray<byte>(0, Allocator.Persistent,
+                        NativeArrayOptions.UninitializedMemory);
+
+                this.occupancyMap = emptyOccupancyMap;
+                occupancyMapSize = default;
+            }
         }
 
         public float GetHeight(float x, float z)
         {
-            // The occupancy map has a 1 pixel border around the terrain.
-            float2 scale = 1f / ((float2(bounds.width, bounds.height) + 2f) * parcelSize);
+            float occupancy;
 
-            float occupancy = SampleBilinearClamp(occupancyMap, occupancyMapSize, float2(
-                (x - (bounds.x - 1) * parcelSize) * scale.x,
-                (z - (bounds.y - 1) * parcelSize) * scale.y));
+            if (occupancyMapSize.x > 0)
+            {
+                // The occupancy map has a 1 pixel border around the terrain.
+                float2 scale = 1f / ((float2(bounds.width, bounds.height) + 2f) * parcelSize);
+
+                occupancy = SampleBilinearClamp(occupancyMap, occupancyMapSize, float2(
+                    (x - (bounds.x - 1) * parcelSize) * scale.x,
+                    (z - (bounds.y - 1) * parcelSize) * scale.y));
+            }
+            else
+            {
+                occupancy = 0f;
+            }
 
             // In the "worst case", if occupancy is 0.25, it can mean that the current vertex is on a
             // corner between one occupied parcel and three free ones, and height must be zero.
             if (occupancy < 0.25f)
             {
-                float height = Noise.GetHeight(x, z);
+                float height = getHeight.Invoke(x, z);
                 return lerp(height, 0f, occupancy * 4f);
             }
             else
@@ -98,17 +127,34 @@ namespace Decentraland.Terrain
             }
         }
 
-        public float3 GetNormal(float x, float z) =>
-            Noise.GetNormal(x, z);
+        public float3 GetNormal(float x, float z)
+        {
+            getNormal.Invoke(x, z, out float3 normal);
+            return normal;
+        }
 
         public Random GetRandom(int2 parcel)
         {
-            return new Random(Noise.lowbias32((uint)(
-                (parcel.y - bounds.y) * bounds.width + parcel.x - bounds.x + seed)));
+            static uint lowbias32(uint x)
+            {
+                x ^= x >> 16;
+                x *= 0x21f0aaad;
+                x ^= x >> 15;
+                x *= 0xd35a2d97;
+                x ^= x >> 15;
+                return x;
+            }
+
+            parcel += 32768;
+            uint seed = lowbias32((uint)((parcel.y << 16) + (parcel.x & 0xffff)));
+            return new Random(seed != 0 ? seed : 1);
         }
 
         public bool IsOccupied(int2 parcel)
         {
+            if (occupancyMapSize.x == 0)
+                return false;
+
             if (parcel.x < bounds.x || parcel.y < bounds.y)
                 return true;
 
@@ -124,7 +170,7 @@ namespace Decentraland.Terrain
         public bool NextTree(int2 parcel, ref Random random, out float3 position, out float rotationY,
             out int prototypeIndex)
         {
-            if (random.NextFloat() < treesPerParcel)
+            if (treePrototypeCount > 0 && random.NextFloat() < treesPerParcel)
             {
                 position.x = parcel.x * parcelSize + random.NextFloat(parcelSize);
                 position.z = parcel.y * parcelSize + random.NextFloat(parcelSize);
@@ -178,8 +224,7 @@ namespace Decentraland.Terrain
     {
         public GameObject source;
         public DetailScatterMode scatterMode;
-        public int density;
-        public float alignToGround;
+        public float density;
         public float minScaleXZ;
         public float maxScaleXZ;
         public float minScaleY;
@@ -193,11 +238,15 @@ namespace Decentraland.Terrain
         JitteredGrid
     }
 
+    public delegate float GetHeightDelegate(float x, float z);
+
+    public delegate void GetNormalDelegate(float x, float z, out float3 normal);
+
     [Serializable]
     internal struct TreeLOD
     {
-        public float minScreenSize;
         public Mesh mesh;
+        public float minScreenSize;
         public Material[] materials;
     }
 
