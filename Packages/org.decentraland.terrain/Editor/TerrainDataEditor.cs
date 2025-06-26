@@ -20,13 +20,13 @@ namespace Decentraland.Terrain
         private void UpdatePrototypes()
         {
             TerrainData target = (TerrainData)this.target;
-            TreePrototype[] treePrototypes = target.treePrototypes;
+            TreePrototype[] treePrototypes = target.TreePrototypes;
 
             for (int i = 0; i < treePrototypes.Length; i++)
             {
                 ref TreePrototype prototype = ref treePrototypes[i];
-                GameObject instance = Object.Instantiate(prototype.source);
-                instance.name = prototype.source.name;
+                GameObject instance = Object.Instantiate(prototype.Source);
+                instance.name = prototype.Source.name;
                 bool hasColliders = false;
 
                 using (ListPool<Component>.Get(out var components))
@@ -55,43 +55,45 @@ namespace Decentraland.Terrain
                             }
                         }
 
-                        string colliderAssetPath = prototype.collider != null
-                            ? AssetDatabase.GetAssetPath(prototype.collider)
+                        string colliderAssetPath = prototype.Collider != null
+                            ? AssetDatabase.GetAssetPath(prototype.Collider)
                             : $"Assets/{instance.name}.prefab";
 
-                        prototype.collider = PrefabUtility.SaveAsPrefabAsset(instance, colliderAssetPath);
+                        prototype.Collider = PrefabUtility.SaveAsPrefabAsset(instance, colliderAssetPath);
                     }
                     else
                     {
-                        prototype.collider = null;
+                        prototype.Collider = null;
                     }
                 }
 
                 Object.DestroyImmediate(instance);
 
-                LODGroup lodGroup = prototype.source.GetComponent<LODGroup>();
-                prototype.localSize = lodGroup.size;
-                LOD[] lods = lodGroup.GetLODs();
-                Array.Resize(ref prototype.lods, lods.Length);
+                LODGroup lodGroup = prototype.Source.GetComponent<LODGroup>();
+                prototype.LocalSize = lodGroup.size;
+                LOD[] groupLods = lodGroup.GetLODs();
+                TreeLOD[] prototypeLods = prototype.Lods;
+                Array.Resize(ref prototypeLods, groupLods.Length);
+                prototype.Lods = prototypeLods;
 
-                for (int j = 0; j < lods.Length; j++)
+                for (int j = 0; j < groupLods.Length; j++)
                 {
-                    LOD lod = lods[j];
+                    LOD lod = groupLods[j];
                     Renderer renderer = lod.renderers[0];
-                    ref TreeLOD treeLod = ref prototype.lods[j];
-                    treeLod.mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
-                    treeLod.minScreenSize = lod.screenRelativeTransitionHeight;
-                    treeLod.materials = renderer.sharedMaterials;
+                    ref TreeLOD treeLod = ref prototypeLods[j];
+                    treeLod.Mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
+                    treeLod.MinScreenSize = lod.screenRelativeTransitionHeight;
+                    treeLod.Materials = renderer.sharedMaterials;
                 }
             }
 
-            DetailPrototype[] detailPrototypes = target.detailPrototypes;
+            DetailPrototype[] detailPrototypes = target.DetailPrototypes;
 
             for (int i = 0; i < detailPrototypes.Length; i++)
             {
                 ref DetailPrototype prototype = ref detailPrototypes[i];
-                prototype.mesh = prototype.source.GetComponent<MeshFilter>().sharedMesh;
-                prototype.material = prototype.source.GetComponent<Renderer>().sharedMaterial;
+                prototype.Mesh = prototype.Source.GetComponent<MeshFilter>().sharedMesh;
+                prototype.Material = prototype.Source.GetComponent<Renderer>().sharedMaterial;
             }
 
             EditorUtility.SetDirty(target);

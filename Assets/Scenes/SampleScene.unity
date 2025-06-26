@@ -149,7 +149,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f13968779bf625e4c9139b3a2108e7b4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  terrainData: {fileID: 11400000, guid: cbbf13f888dcb764f90a05c667d07000, type: 2}
+  <terrainData>k__BackingField: {fileID: 11400000, guid: cbbf13f888dcb764f90a05c667d07000, type: 2}
 --- !u!4 &248761157
 Transform:
   m_ObjectHideFlags: 0
@@ -177,7 +177,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 88f6f4f663e38a84d8daccd1c147597e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  terrainData: {fileID: 11400000, guid: cbbf13f888dcb764f90a05c667d07000, type: 2}
+  <terrainData>k__BackingField: {fileID: 11400000, guid: cbbf13f888dcb764f90a05c667d07000, type: 2}
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0

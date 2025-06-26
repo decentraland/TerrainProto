@@ -10,25 +10,25 @@ namespace Decentraland.Terrain
 {
     public abstract class TerrainData : ScriptableObject
     {
-        public int randomSeed = 1;
-        public Material groundMaterial;
-        public int parcelSize = 16;
-        public RectInt bounds;
-        public float maxHeight;
-        public Texture2D occupancyMap;
-        public float treesPerParcel = 0.15f;
-        public float detailDistance = 200;
-        public bool renderGround = true;
-        public bool renderTreesAndDetail = true;
-        [SerializeField] internal int groundInstanceCapacity = 80;
-        [SerializeField] internal int treeInstanceCapacity = 3000;
-        [SerializeField] internal int detailInstanceCapacity = 40000;
+        [field: SerializeField] private uint RandomSeed { get; set; }
+        [field: SerializeField] internal Material GroundMaterial { get; private set; }
+        [field: SerializeField] internal int ParcelSize { get; private set; }
+        [field: SerializeField] public RectInt Bounds { get; set; }
+        [field: SerializeField] internal float MaxHeight { get; private set; }
+        [field: SerializeField] public Texture2D OccupancyMap { get; set; }
+        [field: SerializeField] private float TreesPerParcel { get; set; }
+        [field: SerializeField] public float DetailDistance { get; set; }
+        [field: SerializeField] public bool RenderGround { get; set; }
+        [field: SerializeField] public bool RenderTreesAndDetail { get; set; }
+        [field: SerializeField] internal int GroundInstanceCapacity { get; set; }
+        [field: SerializeField] internal int TreeInstanceCapacity { get; set; }
+        [field: SerializeField] internal int DetailInstanceCapacity { get; set; }
 
-        [SerializeField, EnumIndexedArray(typeof(GroundMeshType))]
-        internal Mesh[] groundMeshes;
+        [field: SerializeField, EnumIndexedArray(typeof(GroundMeshPiece))]
+        internal Mesh[] GroundMeshes { get; private set; }
 
-        [SerializeField] internal TreePrototype[] treePrototypes;
-        [SerializeField] internal DetailPrototype[] detailPrototypes;
+        [field: SerializeField] internal TreePrototype[] TreePrototypes { get; private set; }
+        [field: SerializeField] internal DetailPrototype[] DetailPrototypes { get; private set; }
 
         protected FunctionPointer<GetHeightDelegate> getHeight;
         protected FunctionPointer<GetNormalDelegate> getNormal;
@@ -40,11 +40,11 @@ namespace Decentraland.Terrain
             if (!getHeight.IsCreated)
                 CompileNoiseFunctions();
 
-            return new TerrainDataData(parcelSize, bounds, maxHeight, occupancyMap, randomSeed,
-                treesPerParcel, treePrototypes.Length, getHeight, getNormal);
+            return new TerrainDataData(ParcelSize, Bounds, MaxHeight, OccupancyMap, RandomSeed,
+                TreesPerParcel, TreePrototypes.Length, getHeight, getNormal);
         }
 
-        private enum GroundMeshType : int
+        private enum GroundMeshPiece : int
         {
             Middle,
             Edge,
@@ -59,7 +59,7 @@ namespace Decentraland.Terrain
         public readonly float maxHeight;
         [ReadOnly] private readonly NativeArray<byte> occupancyMap;
         private readonly int2 occupancyMapSize;
-        private readonly int randomSeed;
+        private readonly uint randomSeed;
         private readonly float treesPerParcel;
         private readonly int treePrototypeCount;
         private readonly FunctionPointer<GetHeightDelegate> getHeight;
@@ -68,7 +68,7 @@ namespace Decentraland.Terrain
         private static NativeArray<byte> emptyOccupancyMap;
 
         public TerrainDataData(int parcelSize, RectInt bounds, float maxHeight, Texture2D occupancyMap,
-            int randomSeed, float treesPerParcel, int treePrototypeCount,
+            uint randomSeed, float treesPerParcel, int treePrototypeCount,
             FunctionPointer<GetHeightDelegate> getHeight, FunctionPointer<GetNormalDelegate> getNormal)
         {
             this.parcelSize = parcelSize;
@@ -146,8 +146,8 @@ namespace Decentraland.Terrain
             }
 
             parcel += 32768;
-            uint seed = lowbias32((uint)((parcel.y << 16) + (parcel.x & 0xffff)));
-            return new Random(seed != 0 ? seed : 1);
+            uint seed = lowbias32(((uint)parcel.y << 16) + ((uint)parcel.x & 0xffff) + randomSeed);
+            return new Random(seed != 0 ? seed : 0x6487ed51);
         }
 
         public bool IsOccupied(int2 parcel)
@@ -222,15 +222,15 @@ namespace Decentraland.Terrain
     [Serializable]
     internal struct DetailPrototype
     {
-        public GameObject source;
-        public DetailScatterMode scatterMode;
-        public float density;
-        public float minScaleXZ;
-        public float maxScaleXZ;
-        public float minScaleY;
-        public float maxScaleY;
-        public Mesh mesh;
-        public Material material;
+        [field: SerializeField] public GameObject Source { get; private set; }
+        [field: SerializeField] public DetailScatterMode ScatterMode { get; private set; }
+        [field: SerializeField] public float Density { get; private set; }
+        [field: SerializeField] public float MinScaleXZ { get; private set; }
+        [field: SerializeField] public float MaxScaleXZ { get; private set; }
+        [field: SerializeField] public float MinScaleY { get; private set; }
+        [field: SerializeField] public float MaxScaleY { get; private set; }
+        [field: SerializeField] public Mesh Mesh { get; internal set; }
+        [field: SerializeField] public Material Material { get; internal set; }
     }
 
     internal enum DetailScatterMode
@@ -245,17 +245,17 @@ namespace Decentraland.Terrain
     [Serializable]
     internal struct TreeLOD
     {
-        public Mesh mesh;
-        public float minScreenSize;
-        public Material[] materials;
+        [field: SerializeField] public Mesh Mesh { get; internal set; }
+        [field: SerializeField] public float MinScreenSize { get; internal set; }
+        [field: SerializeField] public Material[] Materials { get; internal set; }
     }
 
     [Serializable]
     internal struct TreePrototype
     {
-        public GameObject source;
-        public GameObject collider;
-        public float localSize;
-        public TreeLOD[] lods;
+        [field: SerializeField] public GameObject Source { get; private set; }
+        [field: SerializeField] public GameObject Collider { get; internal set; }
+        [field: SerializeField] public float LocalSize { get; internal set; }
+        [field: SerializeField] public TreeLOD[] Lods { get; internal set; }
     }
 }

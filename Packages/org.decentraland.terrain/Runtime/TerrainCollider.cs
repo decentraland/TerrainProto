@@ -14,7 +14,7 @@ namespace Decentraland.Terrain
 {
     public sealed class TerrainCollider : MonoBehaviour
     {
-        [SerializeField] private TerrainData terrainData;
+        [field: SerializeField] private TerrainData terrainData { get; set; }
 
         private readonly List<ParcelData> freeParcels = new();
         private readonly List<ParcelData> usedParcels = new();
@@ -22,10 +22,10 @@ namespace Decentraland.Terrain
 
         private void Awake()
         {
-            treePools = new PrefabInstancePool[terrainData.treePrototypes.Length];
+            treePools = new PrefabInstancePool[terrainData.TreePrototypes.Length];
 
             for (int i = 0; i < treePools.Length; i++)
-                treePools[i] = new PrefabInstancePool(terrainData.treePrototypes[i].collider
+                treePools[i] = new PrefabInstancePool(terrainData.TreePrototypes[i].Collider
 #if UNITY_EDITOR
                     , transform
 #endif
@@ -168,7 +168,7 @@ namespace Decentraland.Terrain
 
         private void SetParcelMeshIndicesAndNormals(Mesh mesh)
         {
-            int parcelSize = terrainData.parcelSize;
+            int parcelSize = terrainData.ParcelSize;
             int sideVertexCount = parcelSize + 1;
 
             using (ListPool<int>.Get(out var triangles))

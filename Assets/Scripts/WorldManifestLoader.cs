@@ -39,14 +39,14 @@ namespace TerrainProto
             GetParcels(worldManifest.empty, ref minParcel, ref maxParcel, parcels);
 
             int2 size = maxParcel - minParcel + 1;
-            terrainData.bounds = new RectInt(minParcel.x, minParcel.y, size.x, size.y);
+            terrainData.Bounds = new RectInt(minParcel.x, minParcel.y, size.x, size.y);
 
             // Give the texture a 1 pixel border. These extra pixels shall be colored red (occupied) so
             // that terrain blends to zero at its edges.
             size += 2;
 
-            terrainData.occupancyMap = new Texture2D(size.x, size.y, TextureFormat.R8, false, true);
-            NativeArray<byte> data = terrainData.occupancyMap.GetRawTextureData<byte>();
+            terrainData.OccupancyMap = new Texture2D(size.x, size.y, TextureFormat.R8, false, true);
+            NativeArray<byte> data = terrainData.OccupancyMap.GetRawTextureData<byte>();
 
             for (int i = 0; i < data.Length; i++)
                 data[i] = 255;
@@ -57,7 +57,7 @@ namespace TerrainProto
                 data[(parcel.y - minParcel.y) * size.x + parcel.x - minParcel.x] = 0;
             }
 
-            terrainData.occupancyMap.Apply(false, false);
+            terrainData.OccupancyMap.Apply(false, false);
         }
 
         private struct WorldManifest
