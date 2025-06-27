@@ -14,7 +14,7 @@ namespace Decentraland.Terrain
 {
     public sealed class TerrainCollider : MonoBehaviour
     {
-        [field: SerializeField] private TerrainData terrainData { get; set; }
+        [field: SerializeField] private TerrainData TerrainData { get; set; }
 
         private readonly List<ParcelData> freeParcels = new();
         private readonly List<ParcelData> usedParcels = new();
@@ -22,14 +22,18 @@ namespace Decentraland.Terrain
 
         private void Awake()
         {
-            treePools = new PrefabInstancePool[terrainData.TreePrototypes.Length];
+            treePools = new PrefabInstancePool[TerrainData.TreePrototypes.Length];
+            Transform poolParent;
+
+#if UNITY_EDITOR
+            poolParent = transform;
+#else
+            poolParent = null;
+#endif
 
             for (int i = 0; i < treePools.Length; i++)
-                treePools[i] = new PrefabInstancePool(terrainData.TreePrototypes[i].Collider
-#if UNITY_EDITOR
-                    , transform
-#endif
-                );
+                treePools[i] = new PrefabInstancePool(TerrainData.TreePrototypes[i].Collider,
+                    poolParent);
         }
 
         private void OnDestroy()
@@ -45,7 +49,7 @@ namespace Decentraland.Terrain
             if (mainCamera == null)
                 return;
 
-            TerrainDataData terrainData = this.terrainData.GetData();
+            TerrainDataData terrainData = this.TerrainData.GetData();
             float useRadius = terrainData.parcelSize * (1f / 3f);
             var cameraPosition = mainCamera.transform.position;
             RectInt usedRect = terrainData.PositionToParcelRect(cameraPosition, useRadius);
@@ -168,7 +172,7 @@ namespace Decentraland.Terrain
 
         private void SetParcelMeshIndicesAndNormals(Mesh mesh)
         {
-            int parcelSize = terrainData.ParcelSize;
+            int parcelSize = TerrainData.ParcelSize;
             int sideVertexCount = parcelSize + 1;
 
             using (ListPool<int>.Get(out var triangles))

@@ -9,20 +9,21 @@ namespace Decentraland.Terrain
     /// Why not <see cref="UnityEngine.Pool.ObjectPool{T}"/>? Because it is not serializable and is not
     /// preserved when reloading scripts during play mode.
     /// </remarks>
+#if UNITY_EDITOR
     [Serializable]
+#endif
     public struct PrefabInstancePool : IDisposable
     {
+        [NonSerialized]
         private List<GameObject> instances;
         private GameObject prefab;
 #if UNITY_EDITOR
         private Transform parent;
 #endif
 
-        public PrefabInstancePool(GameObject prefab
-#if UNITY_EDITOR
-            , Transform parent
-#endif
-        )
+        /// <param name="parent">The transform under which to group all the instances of this pool. It
+        /// is only used in editor.</param>
+        public PrefabInstancePool(GameObject prefab, Transform parent = null)
         {
             instances = new List<GameObject>();
             this.prefab = prefab;

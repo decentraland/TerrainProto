@@ -24,9 +24,10 @@ namespace Decentraland.Terrain
             new(1f, -1f, 1f), new(1f, 1f, 0f), new(1f, 1f, 1f)
         };
 
-        public static ILogger Debug = UnityEngine.Debug.unityLogger;
+        public static ILogHandler LogHandler = Debug.unityLogger;
         private static MaterialPropertyBlock groundMatProps;
         private static NativeArray<int4> magicPattern;
+        private static readonly int OCCUPANCY_MAP_ID = Shader.PropertyToID("_OccupancyMap");
         private static readonly int PARCEL_SIZE_ID = Shader.PropertyToID("_ParcelSize");
         private static readonly int TERRAIN_BOUNDS_ID = Shader.PropertyToID("_TerrainBounds");
 
@@ -41,7 +42,7 @@ namespace Decentraland.Terrain
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (terrainData == null)
             {
-                Debug.LogError("Terrain data is not set up properly", this);
+                LogHandler.LogFormat(LogType.Error, this, "Terrain data is not set up properly");
                 enabled = false;
                 return;
             }
@@ -396,9 +397,9 @@ namespace Decentraland.Terrain
                     terrainData.GroundInstanceCapacity
                         = (int)ceil(terrainData.GroundInstanceCapacity * 1.1f);
 
-                    Debug.LogWarning(
-                        $"The {nameof(groundTransforms)} list ran out of space. Increasing capacity to {terrainData.GroundInstanceCapacity}.",
-                        terrainData);
+                    LogHandler.LogFormat(LogType.Warning, terrainData,
+                        "The {0} list ran out of space. Increasing capacity to {1}.",
+                        nameof(groundTransforms), terrainData.GroundInstanceCapacity);
                 }
 
 #if UNITY_EDITOR
@@ -425,9 +426,9 @@ namespace Decentraland.Terrain
                     terrainData.TreeInstanceCapacity
                         = (int)ceil(terrainData.TreeInstanceCapacity * 1.1f);
 
-                    Debug.LogWarning(
-                        $"The {nameof(treeInstances)} list ran out of space. Increasing capacity to {terrainData.TreeInstanceCapacity}.",
-                        terrainData);
+                    LogHandler.LogFormat(LogType.Warning, terrainData,
+                        "The {0} list ran out of space. Increasing capacity to {1}.",
+                        nameof(treeInstances), terrainData.TreeInstanceCapacity);
                 }
 
 #if UNITY_EDITOR
@@ -447,9 +448,9 @@ namespace Decentraland.Terrain
                     terrainData.DetailInstanceCapacity
                         = (int)ceil(terrainData.DetailInstanceCapacity * 1.1f);
 
-                    Debug.LogWarning(
-                        $"The {nameof(detailInstances)} list ran out of space. Increasing capacity to {terrainData.DetailInstanceCapacity}.",
-                        terrainData);
+                    LogHandler.LogFormat(LogType.Warning, terrainData,
+                        "The {0} list ran out of space. Increasing capacity to {1}.",
+                        nameof(detailInstances), terrainData.DetailInstanceCapacity);
                 }
 
 #if UNITY_EDITOR
@@ -510,6 +511,11 @@ namespace Decentraland.Terrain
 
             if (groundMatProps == null)
                 groundMatProps = new MaterialPropertyBlock();
+
+            if (terrainData.OccupancyMap != null)
+                groundMatProps.SetTexture(OCCUPANCY_MAP_ID, terrainData.OccupancyMap);
+            else
+                groundMatProps.Clear();
 
             groundMatProps.SetFloat(PARCEL_SIZE_ID, terrainData.ParcelSize);
             groundMatProps.SetVector(TERRAIN_BOUNDS_ID, bounds * terrainData.ParcelSize);
