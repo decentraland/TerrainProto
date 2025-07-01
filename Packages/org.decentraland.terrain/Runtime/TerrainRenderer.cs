@@ -7,6 +7,7 @@ using Unity.Mathematics.Geometry;
 using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
+using static Decentraland.Terrain.TerrainLog;
 using static Unity.Mathematics.math;
 using Plane = Unity.Mathematics.Geometry.Plane;
 using Random = Unity.Mathematics.Random;
@@ -16,7 +17,7 @@ namespace Decentraland.Terrain
     [ExecuteAlways]
     public sealed class TerrainRenderer : MonoBehaviour
     {
-        [field: SerializeField] private TerrainData terrainData { get; set; }
+        [field: SerializeField] private TerrainData TerrainData { get; set; }
 
         private static readonly Vector3[] CLIP_CORNERS =
         {
@@ -24,7 +25,6 @@ namespace Decentraland.Terrain
             new(1f, -1f, 1f), new(1f, 1f, 0f), new(1f, 1f, 1f)
         };
 
-        public static ILogHandler LogHandler = Debug.unityLogger;
         private static MaterialPropertyBlock groundMatProps;
         private static NativeArray<int4> magicPattern;
         private static readonly int OCCUPANCY_MAP_ID = Shader.PropertyToID("_OccupancyMap");
@@ -40,7 +40,7 @@ namespace Decentraland.Terrain
         private void Update()
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (terrainData == null)
+            if (TerrainData == null)
             {
                 LogHandler.LogFormat(LogType.Error, this, "Terrain data is not set up properly");
                 enabled = false;
@@ -68,7 +68,7 @@ namespace Decentraland.Terrain
             if (camera == null)
                 return;
 
-            Render(terrainData, camera,
+            Render(TerrainData, camera,
 #if UNITY_EDITOR
                 true, this
 #else
@@ -84,7 +84,7 @@ namespace Decentraland.Terrain
             Gizmos.DrawWireCube(bounds.center, bounds.size);
         }
 
-        public Bounds Bounds => terrainData != null ? GetBounds(terrainData) : default;
+        public Bounds Bounds => TerrainData != null ? GetBounds(TerrainData) : default;
 
         private static NativeArray<int4> CreateMagicPattern()
         {
@@ -335,8 +335,7 @@ namespace Decentraland.Terrain
                 Vector2Int terrainSize = terrainData.Bounds.size;
                 int parcelCount = terrainSize.x * terrainSize.y;
 
-                scatterObjects = scatterObjectsJob.Schedule(parcelCount,
-                    JobUtility.GetBatchSize(parcelCount));
+                scatterObjects = scatterObjectsJob.Schedule(parcelCount);
 
                 treeInstanceCounts = new NativeArray<int>(treeMeshCount, Allocator.TempJob);
                 treeTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);

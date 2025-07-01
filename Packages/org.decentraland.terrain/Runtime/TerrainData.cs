@@ -102,7 +102,7 @@ namespace Decentraland.Terrain
 
             if (occupancyMapSize.x > 0)
             {
-                // The occupancy map has a 1 pixel border around the terrain.
+                // The occupancy map is assumed to have a 1 pixel border around the terrain.
                 float2 scale = 1f / ((float2(bounds.width, bounds.height) + 2f) * parcelSize);
 
                 occupancy = SampleBilinearClamp(occupancyMap, occupancyMapSize, float2(
@@ -188,19 +188,12 @@ namespace Decentraland.Terrain
             }
         }
 
-        public RectInt PositionToParcelRect(Vector3 center, float radius)
+        internal RectInt PositionToParcelRect(float2 centerXZ, float radius)
         {
             float invParcelSize = 1f / parcelSize;
-
-            Vector2Int min = new Vector2Int(
-                Mathf.RoundToInt((center.x - radius) * invParcelSize - 0.5f),
-                Mathf.RoundToInt((center.z - radius) * invParcelSize - 0.5f));
-
-            Vector2Int max = new Vector2Int(
-                Mathf.RoundToInt((center.x + radius) * invParcelSize - 0.5f),
-                Mathf.RoundToInt((center.z + radius) * invParcelSize - 0.5f));
-
-            return new RectInt(min.x, min.y, max.x - min.x + 1, max.y - min.y + 1);
+            int2 min = (int2)((centerXZ - radius) * invParcelSize);
+            int2 size = (int2)((centerXZ + radius) * invParcelSize) - min + 1;
+            return new RectInt(min.x, min.y, size.x, size.y);
         }
 
         private static float SampleBilinearClamp(NativeArray<byte> texture, int2 textureSize, float2 uv)

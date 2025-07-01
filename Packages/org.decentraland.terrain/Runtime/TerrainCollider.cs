@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using Unity.Burst;
 using Unity.Collections;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.Pool;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using static Unity.Mathematics.math;
@@ -16,9 +16,19 @@ namespace Decentraland.Terrain
     {
         [field: SerializeField] private TerrainData TerrainData { get; set; }
 
+        private readonly List<ParcelData> dirtyParcels = new();
         private readonly List<ParcelData> freeParcels = new();
         private readonly List<ParcelData> usedParcels = new();
+        private static short[] indexBuffer;
         private PrefabInstancePool[] treePools;
+
+        private static VertexAttributeDescriptor[] vertexLayout =
+        {
+            new(VertexAttribute.Position, VertexAttributeFormat.Float32, 3)
+#if UNITY_EDITOR
+            , new(VertexAttribute.Normal, VertexAttributeFormat.Float32, 3)
+#endif
+        };
 
         private void Awake()
         {
@@ -49,16 +59,16 @@ namespace Decentraland.Terrain
             if (mainCamera == null)
                 return;
 
-            TerrainDataData terrainData = this.TerrainData.GetData();
+            TerrainDataData terrainData = TerrainData.GetData();
             float useRadius = terrainData.parcelSize * (1f / 3f);
-            var cameraPosition = mainCamera.transform.position;
+            float2 cameraPosition = ((float3)mainCamera.transform.position).xz;
             RectInt usedRect = terrainData.PositionToParcelRect(cameraPosition, useRadius);
 
             for (int i = usedParcels.Count - 1; i >= 0; i--)
             {
                 ParcelData parcelData = usedParcels[i];
 
-                if (!usedRect.Contains(parcelData.parcel))
+                if (!usedRect.Contains(parcelData.parcel.ToVector2Int()))
                 {
                     usedParcels.RemoveAtSwapBack(i);
                     freeParcels.Add(parcelData);
@@ -68,12 +78,10 @@ namespace Decentraland.Terrain
             for (int y = usedRect.yMin; y < usedRect.yMax; y++)
             for (int x = usedRect.xMin; x < usedRect.xMax; x++)
             {
-                Vector2Int parcel = new Vector2Int(x, y);
+                int2 parcel = int2(x, y);
 
-                if (usedParcels.Any(i => i.parcel == parcel))
+                if (ContainsParcel(usedParcels, parcel))
                     continue;
-
-                Random random = terrainData.GetRandom(int2(parcel.x, parcel.y));
 
                 if (freeParcels.Count > 0)
                 {
@@ -85,7 +93,7 @@ namespace Decentraland.Terrain
                     {
                         ParcelData freeParcel = freeParcels[i];
 
-                        if (freeParcel.parcel == parcel)
+                        if (all(freeParcel.parcel == parcel))
                         {
                             parcelData = freeParcel;
                             freeParcels.RemoveAtSwapBack(i);
@@ -100,11 +108,9 @@ namespace Decentraland.Terrain
                         int lastIndex = freeParcels.Count - 1;
                         parcelData = freeParcels[lastIndex];
                         parcelData.parcel = parcel;
+                        dirtyParcels.Add(parcelData);
                         freeParcels.RemoveAt(lastIndex);
                         usedParcels.Add(parcelData);
-
-                        SetParcelMeshVertices(parcelData.mesh, parcel, in terrainData);
-                        parcelData.collider.sharedMesh = parcelData.mesh;
 
                         parcelData.collider.transform.position = new Vector3(
                             parcel.x * terrainData.parcelSize, 0f, parcel.y * terrainData.parcelSize);
@@ -116,35 +122,26 @@ namespace Decentraland.Terrain
                             parcelData.treePrototypeIndex = -1;
                         }
 
+                        Random random = terrainData.GetRandom(parcel);
                         GenerateTree(parcel, in terrainData, ref random, parcelData);
                     }
                 }
                 else
                 {
-                    ParcelData parcelData = new() { parcel = parcel, mesh = new Mesh() };
+                    Mesh mesh = CreateParcelMesh(in terrainData);
+                    ParcelData parcelData = new() { parcel = parcel, mesh = mesh };
+                    dirtyParcels.Add(parcelData);
                     usedParcels.Add(parcelData);
-
-                    parcelData.mesh.name = "Parcel Collision Mesh";
-                    parcelData.mesh.MarkDynamic();
-                    SetParcelMeshVertices(parcelData.mesh, parcel, in terrainData);
-                    SetParcelMeshIndicesAndNormals(parcelData.mesh);
-
-                    Vector3 parcelMax = new Vector3(terrainData.parcelSize, terrainData.maxHeight,
-                        terrainData.parcelSize);
-
-                    parcelData.mesh.bounds = new Bounds(parcelMax * 0.5f, parcelMax);
 
                     parcelData.collider = new GameObject("Parcel Collider")
                         .AddComponent<MeshCollider>();
 
-                    parcelData.collider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation
-                                                         | MeshColliderCookingOptions.UseFastMidphase;
-
-                    parcelData.collider.sharedMesh = parcelData.mesh;
+                    parcelData.collider.cookingOptions = MeshColliderCookingOptions.UseFastMidphase;
 
                     parcelData.collider.transform.position = new Vector3(
                         parcel.x * terrainData.parcelSize, 0f, parcel.y * terrainData.parcelSize);
 
+                    Random random = terrainData.GetRandom(parcel);
                     GenerateTree(parcel, in terrainData, ref random, parcelData);
 
 #if UNITY_EDITOR
@@ -152,13 +149,125 @@ namespace Decentraland.Terrain
 #endif
                 }
             }
+
+            if (dirtyParcels.Count == 0)
+                return;
+
+            var parcels = new NativeArray<int2>(dirtyParcels.Count, Allocator.TempJob,
+                NativeArrayOptions.UninitializedMemory);
+
+            for (int i = 0; i < dirtyParcels.Count; i++)
+                parcels[i] = dirtyParcels[i].parcel;
+
+            int sideVertexCount = terrainData.parcelSize + 1;
+            int meshVertexCount = sideVertexCount * sideVertexCount;
+
+            var vertices = new NativeArray<Vertex>(meshVertexCount * dirtyParcels.Count,
+                Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+
+            var generateVerticesJob = new GenerateVertices()
+            {
+                terrainData = terrainData,
+                parcels = parcels,
+                vertices = vertices
+            };
+
+            generateVerticesJob.Schedule(vertices.Length).Complete();
+
+            for (int i = 0; i < dirtyParcels.Count; i++)
+            {
+                ParcelData parcelData = dirtyParcels[i];
+
+                parcelData.mesh.SetVertexBufferData(vertices, i * meshVertexCount, 0, meshVertexCount,
+                    0, MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds);
+            }
+
+            var meshes = new NativeArray<int>(dirtyParcels.Count, Allocator.TempJob,
+                NativeArrayOptions.UninitializedMemory);
+
+            for (int i = 0; i < dirtyParcels.Count; i++)
+                meshes[i] = dirtyParcels[i].mesh.GetInstanceID();
+
+            var bakeMeshesJob = new BakeMeshes() { meshes = meshes };
+            bakeMeshesJob.Schedule(meshes.Length, 1).Complete();
+
+            for (int i = 0; i < dirtyParcels.Count; i++)
+            {
+                ParcelData parcelData = dirtyParcels[i];
+
+                // Needed even if the mesh is already assigned to the collider. Doing it will cause the
+                // collider to check if the mesh has changed.
+                parcelData.collider.sharedMesh = parcelData.mesh;
+            }
+
+            dirtyParcels.Clear();
         }
 
-        private void GenerateTree(Vector2Int parcel, in TerrainDataData terrainData, ref Random random,
+        private static bool ContainsParcel(List<ParcelData> parcels, int2 parcel)
+        {
+            for (int i = 0; i < parcels.Count; i++)
+                if (all(parcels[i].parcel == parcel))
+                    return true;
+
+            return false;
+        }
+
+        private static short[] CreateIndexBuffer(int parcelSize)
+        {
+            int index = 0;
+            var indexBuffer = new short[parcelSize * parcelSize * 6];
+            int sideVertexCount = parcelSize + 1;
+
+            for (int z = 0; z < parcelSize; z++)
+            {
+                for (int x = 0; x < parcelSize; x++)
+                {
+                    int start = z * sideVertexCount + x;
+
+                    indexBuffer[index++] = (short)start;
+                    indexBuffer[index++] = (short)(start + sideVertexCount + 1);
+                    indexBuffer[index++] = (short)(start + 1);
+
+                    indexBuffer[index++] = (short)start;
+                    indexBuffer[index++] = (short)(start + sideVertexCount);
+                    indexBuffer[index++] = (short)(start + sideVertexCount + 1);
+                }
+            }
+
+            return indexBuffer;
+        }
+
+        private static Mesh CreateParcelMesh(in TerrainDataData terrainData)
+        {
+            if (indexBuffer == null)
+                indexBuffer = CreateIndexBuffer(terrainData.parcelSize);
+
+            var mesh = new Mesh() { name = "Parcel Collision Mesh" };
+            mesh.MarkDynamic();
+            int sideVertexCount = terrainData.parcelSize + 1;
+            mesh.SetVertexBufferParams(sideVertexCount * sideVertexCount, vertexLayout);
+            mesh.SetIndexBufferParams(indexBuffer.Length, IndexFormat.UInt16);
+            mesh.subMeshCount = 1;
+
+            var flags = MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers
+                                                            | MeshUpdateFlags.DontRecalculateBounds;
+
+            mesh.SetIndexBufferData(indexBuffer, 0, 0, indexBuffer.Length, flags);
+            mesh.SetSubMesh(0, new SubMeshDescriptor(0, indexBuffer.Length), flags);
+
+            Vector3 parcelMax = new Vector3(terrainData.parcelSize, terrainData.maxHeight,
+                terrainData.parcelSize);
+
+            mesh.bounds = new Bounds(parcelMax * 0.5f, parcelMax);
+
+            return mesh;
+        }
+
+        private void GenerateTree(int2 parcel, in TerrainDataData terrainData, ref Random random,
             ParcelData parcelData)
         {
-            if (!terrainData.NextTree(int2(parcel.x, parcel.y), ref random,
-                    out float3 position, out float rotationY, out int prototypeIndex))
+            if (!terrainData.NextTree(parcel, ref random, out float3 position, out float rotationY,
+                    out int prototypeIndex))
             {
                 return;
             }
@@ -170,87 +279,69 @@ namespace Decentraland.Terrain
                 Quaternion.Euler(0f, rotationY, 0f));
         }
 
-        private void SetParcelMeshIndicesAndNormals(Mesh mesh)
+        [BurstCompile]
+        private struct BakeMeshes : IJobParallelFor
         {
-            int parcelSize = TerrainData.ParcelSize;
-            int sideVertexCount = parcelSize + 1;
+            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<int> meshes;
 
-            using (ListPool<int>.Get(out var triangles))
-            {
-                triangles.EnsureCapacity(parcelSize * parcelSize * 6);
-
-                for (int z = 0; z < parcelSize; z++)
-                {
-                    for (int x = 0; x < parcelSize; x++)
-                    {
-                        int start = z * sideVertexCount + x;
-
-                        triangles.Add(start);
-                        triangles.Add(start + sideVertexCount + 1);
-                        triangles.Add(start + 1);
-
-                        triangles.Add(start);
-                        triangles.Add(start + sideVertexCount);
-                        triangles.Add(start + sideVertexCount + 1);
-                    }
-                }
-
-                mesh.SetTriangles(triangles, 0, false);
-            }
-
-            // Normals are only needed to draw the collider gizmo.
-#if UNITY_EDITOR
-            using (ListPool<Vector3>.Get(out var normals))
-            {
-                int normalsCount = sideVertexCount * sideVertexCount;
-                normals.EnsureCapacity(normalsCount);
-
-                for (int i = 0; i < normalsCount; i++)
-                    normals.Add(Vector3.up);
-
-                mesh.SetNormals(normals, 0, normalsCount,
-                    MeshUpdateFlags.DontNotifyMeshUsers | MeshUpdateFlags.DontRecalculateBounds);
-            }
-#endif
+            public void Execute(int index) =>
+                Physics.BakeMesh(meshes[index], false, MeshColliderCookingOptions.UseFastMidphase);
         }
 
-        private void SetParcelMeshVertices(Mesh mesh, Vector2Int parcel, in TerrainDataData terrainData)
+        [BurstCompile]
+        private struct GenerateVertices : IJobParallelForBatch
         {
-            Profiler.BeginSample(nameof(SetParcelMeshVertices));
-            int parcelSize = terrainData.parcelSize;
-            Vector2 parcelOriginXZ = new Vector2(parcel.x * parcelSize, parcel.y * parcelSize);
+            public TerrainDataData terrainData;
+            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<int2> parcels;
+            [WriteOnly] public NativeArray<Vertex> vertices;
 
-            using (ListPool<Vector3>.Get(out var vertices))
+            public void Execute(int startIndex, int count)
             {
-                int sideVertexCount = parcelSize + 1;
-                vertices.EnsureCapacity(sideVertexCount * sideVertexCount);
-                Profiler.BeginSample("GetTerrainHeight");
+                int batchEnd = startIndex + count;
+                int vertexIndex = startIndex;
+                int sideVertexCount = terrainData.parcelSize + 1;
+                int meshVertexCount = sideVertexCount * sideVertexCount;
+                int meshIndex = startIndex / meshVertexCount;
 
-                for (int z = 0; z < sideVertexCount; z++)
+                while (vertexIndex < batchEnd)
                 {
-                    for (int x = 0; x < sideVertexCount; x++)
+                    int2 parcel = parcels[meshIndex];
+                    int2 parcelOriginXZ = parcel * terrainData.parcelSize;
+                    int meshStart = meshIndex * meshVertexCount;
+                    int meshEnd = min(meshStart + meshVertexCount, batchEnd);
+
+                    while (vertexIndex < meshEnd)
                     {
+                        int x = (vertexIndex - meshStart) % sideVertexCount;
+                        int z = (vertexIndex - meshStart) / sideVertexCount;
                         float y = terrainData.GetHeight(x + parcelOriginXZ.x, z + parcelOriginXZ.y);
-                        vertices.Add(new Vector3(x, y, z));
+
+                        var vertex = new Vertex() { position = float3(x, y, z) };
+#if UNITY_EDITOR
+                        vertex.normal = terrainData.GetNormal(x, z);
+#endif
+
+                        vertices[vertexIndex] = vertex;
+                        vertexIndex++;
                     }
+
+                    meshIndex++;
                 }
-
-                Profiler.EndSample();
-                Profiler.BeginSample("SetMeshVertices");
-
-                mesh.SetVertices(vertices, 0, vertices.Count,
-                    MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds);
-
-                Profiler.EndSample();
             }
+        }
 
-            Profiler.EndSample();
+        private struct Vertex
+        {
+            public float3 position;
+#if UNITY_EDITOR // Normals are only needed to draw the collider gizmo.
+            public float3 normal;
+#endif
         }
 
         [Serializable]
         private sealed class ParcelData
         {
-            public Vector2Int parcel;
+            public int2 parcel;
             public MeshCollider collider;
             public Mesh mesh;
             public int treePrototypeIndex = -1;

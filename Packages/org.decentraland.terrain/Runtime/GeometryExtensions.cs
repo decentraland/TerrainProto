@@ -24,9 +24,10 @@ namespace Decentraland.Terrain
             }
         }
 
-        public static MinMaxAABB ToMinMaxAABB(this Bounds bounds)
-        {
-            return new MinMaxAABB(bounds.min, bounds.max);
-        }
+        public static MinMaxAABB ToMinMaxAABB(this Bounds bounds) =>
+            new MinMaxAABB(bounds.min, bounds.max);
+
+        public static Vector2Int ToVector2Int(this int2 value) =>
+            new Vector2Int(value.x, value.y);
     }
 }
