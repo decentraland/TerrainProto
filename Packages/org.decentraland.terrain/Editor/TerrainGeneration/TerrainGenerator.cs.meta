@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 2405b2055c5f46e6a2424c69db6ba2ff
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - terrainComputeShader: {fileID: 7200000, guid: 0851a4d912694c5e86cbe6711e9ae412, type: 3}
+  - bc1CompressionShader: {fileID: 7200000, guid: f5ad93fef79049babed4729d100e81b6, type: 3}
+  - outputTexture: {fileID: 8400000, guid: 2688d0eec319f3c43969a233776ac6bc, type: 2}
+  - previewMaterial: {fileID: 2100000, guid: 60aa5c20013307a40a613d9a7a76d791, type: 2}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
