@@ -5,7 +5,6 @@ using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using static Unity.Mathematics.math;
 using Random = Unity.Mathematics.Random;
@@ -16,11 +15,8 @@ namespace Decentraland.Terrain
     {
         [field: SerializeField] private TerrainData TerrainData { get; set; }
 
-        private readonly List<ParcelData> dirtyParcels = new();
-        private readonly List<ParcelData> freeParcels = new();
-        private readonly List<ParcelData> usedParcels = new();
         private static short[] indexBuffer;
-        private PrefabInstancePool[] treePools;
+        private TerrainColliderState state;
 
         private static VertexAttributeDescriptor[] vertexLayout =
         {
@@ -32,137 +28,133 @@ namespace Decentraland.Terrain
 
         private void Awake()
         {
-            treePools = new PrefabInstancePool[TerrainData.TreePrototypes.Length];
-            Transform poolParent;
-
+            state = new TerrainColliderState(TerrainData
 #if UNITY_EDITOR
-            poolParent = transform;
-#else
-            poolParent = null;
+                , transform
 #endif
-
-            for (int i = 0; i < treePools.Length; i++)
-                treePools[i] = new PrefabInstancePool(TerrainData.TreePrototypes[i].Collider,
-                    poolParent);
+            );
         }
 
-        private void OnDestroy()
-        {
-            for (int i = 0; i < treePools.Length; i++)
-                treePools[i].Dispose();
-        }
+        private void OnDestroy() =>
+            state.Dispose();
 
-        private void Update()
-        {
-            var mainCamera = Camera.main;
+        private void Update() =>
+            Update(state, TerrainColliderUser.GetPositionsXZ());
 
-            if (mainCamera == null)
+        public static void Update(TerrainColliderState state, List<float2> userPositionsXZ)
+        {
+            if (userPositionsXZ.Count == 0)
                 return;
 
-            TerrainDataData terrainData = TerrainData.GetData();
+            TerrainDataData terrainData = state.terrainData.GetData();
             float useRadius = terrainData.parcelSize * (1f / 3f);
-            float2 cameraPosition = ((float3)mainCamera.transform.position).xz;
-            RectInt usedRect = terrainData.PositionToParcelRect(cameraPosition, useRadius);
 
-            for (int i = usedParcels.Count - 1; i >= 0; i--)
+            for (int i = 0; i < userPositionsXZ.Count; i++)
             {
-                ParcelData parcelData = usedParcels[i];
+                RectInt usedRect = terrainData.PositionToParcelRect(userPositionsXZ[i], useRadius);
 
-                if (!usedRect.Contains(parcelData.parcel.ToVector2Int()))
+                for (int j = state.usedParcels.Count - 1; j >= 0; j--)
                 {
-                    usedParcels.RemoveAtSwapBack(i);
-                    freeParcels.Add(parcelData);
-                }
-            }
+                    ParcelData parcelData = state.usedParcels[j];
 
-            for (int y = usedRect.yMin; y < usedRect.yMax; y++)
-            for (int x = usedRect.xMin; x < usedRect.xMax; x++)
-            {
-                int2 parcel = int2(x, y);
-
-                if (ContainsParcel(usedParcels, parcel))
-                    continue;
-
-                if (freeParcels.Count > 0)
-                {
-                    ParcelData parcelData = null;
-
-                    // First, check if the exact parcel we need is in the free list already. If so,
-                    // there's nothing to do.
-                    for (int i = freeParcels.Count - 1; i >= 0; i--)
+                    if (!usedRect.Contains(parcelData.parcel.ToVector2Int()))
                     {
-                        ParcelData freeParcel = freeParcels[i];
+                        state.usedParcels.RemoveAtSwapBack(j);
+                        state.freeParcels.Add(parcelData);
+                    }
+                }
 
-                        if (all(freeParcel.parcel == parcel))
+                for (int y = usedRect.yMin; y < usedRect.yMax; y++)
+                for (int x = usedRect.xMin; x < usedRect.xMax; x++)
+                {
+                    int2 parcel = int2(x, y);
+
+                    if (ContainsParcel(state.usedParcels, parcel))
+                        continue;
+
+                    if (state.freeParcels.Count > 0)
+                    {
+                        ParcelData parcelData = null;
+
+                        // First, check if the exact parcel we need is in the free list already. If so,
+                        // there's nothing to do.
+                        for (int j = state.freeParcels.Count - 1; j >= 0; j--)
                         {
-                            parcelData = freeParcel;
-                            freeParcels.RemoveAtSwapBack(i);
-                            usedParcels.Add(parcelData);
-                            break;
+                            ParcelData freeParcel = state.freeParcels[j];
+
+                            if (all(freeParcel.parcel == parcel))
+                            {
+                                parcelData = freeParcel;
+                                state.freeParcels.RemoveAtSwapBack(j);
+                                state.usedParcels.Add(parcelData);
+                                break;
+                            }
+                        }
+
+                        // Else, reuse the last parcel in the free list.
+                        if (parcelData == null)
+                        {
+                            int lastIndex = state.freeParcels.Count - 1;
+                            parcelData = state.freeParcels[lastIndex];
+                            parcelData.parcel = parcel;
+                            state.dirtyParcels.Add(parcelData);
+                            state.freeParcels.RemoveAt(lastIndex);
+                            state.usedParcels.Add(parcelData);
+
+                            parcelData.collider.transform.position = new Vector3(
+                                parcel.x * terrainData.parcelSize, 0f,
+                                parcel.y * terrainData.parcelSize);
+
+                            if (parcelData.treePrototypeIndex >= 0)
+                            {
+                                state.treePools[parcelData.treePrototypeIndex]
+                                    .Release(parcelData.treeInstance);
+
+                                parcelData.treeInstance = null;
+                                parcelData.treePrototypeIndex = -1;
+                            }
+
+                            Random random = terrainData.GetRandom(parcel);
+                            GenerateTree(parcel, in terrainData, ref random, parcelData, state);
                         }
                     }
-
-                    // Else, reuse the last parcel in the free list.
-                    if (parcelData == null)
+                    else
                     {
-                        int lastIndex = freeParcels.Count - 1;
-                        parcelData = freeParcels[lastIndex];
-                        parcelData.parcel = parcel;
-                        dirtyParcels.Add(parcelData);
-                        freeParcels.RemoveAt(lastIndex);
-                        usedParcels.Add(parcelData);
+                        Mesh mesh = CreateParcelMesh(in terrainData);
+                        ParcelData parcelData = new() { parcel = parcel, mesh = mesh };
+                        state.dirtyParcels.Add(parcelData);
+                        state.usedParcels.Add(parcelData);
 
-                        parcelData.collider.transform.position = new Vector3(
-                            parcel.x * terrainData.parcelSize, 0f, parcel.y * terrainData.parcelSize);
+                        parcelData.collider = new GameObject("Parcel Collider")
+                            .AddComponent<MeshCollider>();
 
-                        if (parcelData.treePrototypeIndex >= 0)
-                        {
-                            treePools[parcelData.treePrototypeIndex].Release(parcelData.treeInstance);
-                            parcelData.treeInstance = null;
-                            parcelData.treePrototypeIndex = -1;
-                        }
+                        parcelData.collider.cookingOptions = MeshColliderCookingOptions.UseFastMidphase;
+                        Transform transform = parcelData.collider.transform;
+
+                        transform.position = new Vector3(parcel.x * terrainData.parcelSize, 0f,
+                            parcel.y * terrainData.parcelSize);
+
+                        transform.SetParent(state.parent, true);
 
                         Random random = terrainData.GetRandom(parcel);
-                        GenerateTree(parcel, in terrainData, ref random, parcelData);
+                        GenerateTree(parcel, in terrainData, ref random, parcelData, state);
                     }
-                }
-                else
-                {
-                    Mesh mesh = CreateParcelMesh(in terrainData);
-                    ParcelData parcelData = new() { parcel = parcel, mesh = mesh };
-                    dirtyParcels.Add(parcelData);
-                    usedParcels.Add(parcelData);
-
-                    parcelData.collider = new GameObject("Parcel Collider")
-                        .AddComponent<MeshCollider>();
-
-                    parcelData.collider.cookingOptions = MeshColliderCookingOptions.UseFastMidphase;
-
-                    parcelData.collider.transform.position = new Vector3(
-                        parcel.x * terrainData.parcelSize, 0f, parcel.y * terrainData.parcelSize);
-
-                    Random random = terrainData.GetRandom(parcel);
-                    GenerateTree(parcel, in terrainData, ref random, parcelData);
-
-#if UNITY_EDITOR
-                    parcelData.collider.transform.SetParent(transform, true);
-#endif
                 }
             }
 
-            if (dirtyParcels.Count == 0)
+            if (state.dirtyParcels.Count == 0)
                 return;
 
-            var parcels = new NativeArray<int2>(dirtyParcels.Count, Allocator.TempJob,
+            var parcels = new NativeArray<int2>(state.dirtyParcels.Count, Allocator.TempJob,
                 NativeArrayOptions.UninitializedMemory);
 
-            for (int i = 0; i < dirtyParcels.Count; i++)
-                parcels[i] = dirtyParcels[i].parcel;
+            for (int i = 0; i < state.dirtyParcels.Count; i++)
+                parcels[i] = state.dirtyParcels[i].parcel;
 
             int sideVertexCount = terrainData.parcelSize + 1;
             int meshVertexCount = sideVertexCount * sideVertexCount;
 
-            var vertices = new NativeArray<Vertex>(meshVertexCount * dirtyParcels.Count,
+            var vertices = new NativeArray<Vertex>(meshVertexCount * state.dirtyParcels.Count,
                 Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
             var generateVerticesJob = new GenerateVertices()
@@ -174,33 +166,33 @@ namespace Decentraland.Terrain
 
             generateVerticesJob.Schedule(vertices.Length).Complete();
 
-            for (int i = 0; i < dirtyParcels.Count; i++)
+            for (int i = 0; i < state.dirtyParcels.Count; i++)
             {
-                ParcelData parcelData = dirtyParcels[i];
+                ParcelData parcelData = state.dirtyParcels[i];
 
                 parcelData.mesh.SetVertexBufferData(vertices, i * meshVertexCount, 0, meshVertexCount,
                     0, MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds);
             }
 
-            var meshes = new NativeArray<int>(dirtyParcels.Count, Allocator.TempJob,
+            var meshes = new NativeArray<int>(state.dirtyParcels.Count, Allocator.TempJob,
                 NativeArrayOptions.UninitializedMemory);
 
-            for (int i = 0; i < dirtyParcels.Count; i++)
-                meshes[i] = dirtyParcels[i].mesh.GetInstanceID();
+            for (int i = 0; i < state.dirtyParcels.Count; i++)
+                meshes[i] = state.dirtyParcels[i].mesh.GetInstanceID();
 
             var bakeMeshesJob = new BakeMeshes() { meshes = meshes };
             bakeMeshesJob.Schedule(meshes.Length, 1).Complete();
 
-            for (int i = 0; i < dirtyParcels.Count; i++)
+            for (int i = 0; i < state.dirtyParcels.Count; i++)
             {
-                ParcelData parcelData = dirtyParcels[i];
+                ParcelData parcelData = state.dirtyParcels[i];
 
                 // Needed even if the mesh is already assigned to the collider. Doing it will cause the
                 // collider to check if the mesh has changed.
                 parcelData.collider.sharedMesh = parcelData.mesh;
             }
 
-            dirtyParcels.Clear();
+            state.dirtyParcels.Clear();
         }
 
         private static bool ContainsParcel(List<ParcelData> parcels, int2 parcel)
@@ -263,8 +255,8 @@ namespace Decentraland.Terrain
             return mesh;
         }
 
-        private void GenerateTree(int2 parcel, in TerrainDataData terrainData, ref Random random,
-            ParcelData parcelData)
+        private static void GenerateTree(int2 parcel, in TerrainDataData terrainData, ref Random random,
+            ParcelData parcelData, TerrainColliderState state)
         {
             if (!terrainData.NextTree(parcel, ref random, out float3 position, out float rotationY,
                     out int prototypeIndex))
@@ -272,7 +264,7 @@ namespace Decentraland.Terrain
                 return;
             }
 
-            parcelData.treeInstance = treePools[prototypeIndex].Get();
+            parcelData.treeInstance = state.treePools[prototypeIndex].Get();
             parcelData.treePrototypeIndex = prototypeIndex;
 
             parcelData.treeInstance.transform.SetPositionAndRotation(position,
@@ -339,13 +331,40 @@ namespace Decentraland.Terrain
         }
 
         [Serializable]
-        private sealed class ParcelData
+        internal sealed class ParcelData
         {
             public int2 parcel;
             public MeshCollider collider;
             public Mesh mesh;
             public int treePrototypeIndex = -1;
             public GameObject treeInstance;
+        }
+    }
+
+    [Serializable]
+    public sealed class TerrainColliderState : IDisposable
+    {
+        internal List<TerrainCollider.ParcelData> dirtyParcels = new();
+        internal List<TerrainCollider.ParcelData> freeParcels = new();
+        internal List<TerrainCollider.ParcelData> usedParcels = new();
+        internal Transform parent;
+        internal TerrainData terrainData;
+        internal PrefabInstancePool[] treePools;
+
+        public TerrainColliderState(TerrainData terrainData, Transform parent = null)
+        {
+            this.terrainData = terrainData;
+            this.parent = parent;
+            treePools = new PrefabInstancePool[terrainData.TreePrototypes.Length];
+
+            for (int i = 0; i < treePools.Length; i++)
+                treePools[i] = new PrefabInstancePool(terrainData.TreePrototypes[i].Collider, parent);
+        }
+
+        public void Dispose()
+        {
+            for (int i = 0; i < treePools.Length; i++)
+                treePools[i].Dispose();
         }
     }
 }

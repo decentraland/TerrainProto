@@ -9,12 +9,9 @@ namespace Decentraland.Terrain
     /// Why not <see cref="UnityEngine.Pool.ObjectPool{T}"/>? Because it is not serializable and is not
     /// preserved when reloading scripts during play mode.
     /// </remarks>
-#if UNITY_EDITOR
     [Serializable]
-#endif
     public struct PrefabInstancePool : IDisposable
     {
-        [NonSerialized]
         private List<GameObject> instances;
         private GameObject prefab;
 #if UNITY_EDITOR
@@ -60,6 +57,8 @@ namespace Decentraland.Terrain
                     , parent
 #endif
                 );
+
+                item.name = prefab.name;
             }
 
             return item;
