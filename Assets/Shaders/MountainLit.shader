@@ -101,6 +101,7 @@ Shader "DCL/MountainLit"
             ZWrite[_ZWrite]
             Cull[_Cull]
             AlphaToMask[_AlphaToMask]
+            Offset 1, 1
 
             HLSLPROGRAM
             #pragma target 5.0
