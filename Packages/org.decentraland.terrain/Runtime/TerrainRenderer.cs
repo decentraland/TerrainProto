@@ -859,8 +859,13 @@ namespace Decentraland.Terrain
                 float invGridSize = (float)terrainData.parcelSize / gridSize;
                 float2 corner0 = parcel * terrainData.parcelSize;
 
-                for (int z = 0; z < gridSize; z++)
-                for (int x = 0; x < gridSize; x++)
+                int xMin = terrainData.IsOccupied(int2(parcel.x - 1, parcel.y)) ? 1 : 0;
+                int xMax = gridSize - (terrainData.IsOccupied(int2(parcel.x + 1, parcel.y)) ? 1 : 0);
+                int zMin = terrainData.IsOccupied(int2(parcel.x, parcel.y - 1)) ? 1 : 0;
+                int zMax = gridSize - (terrainData.IsOccupied(int2(parcel.x, parcel.y + 1)) ? 1 : 0);
+
+                for (int z = zMin; z < zMax; z++)
+                for (int x = xMin; x < xMax; x++)
                 {
                     float3 position;
                     position.x = corner0.x + x * invGridSize + random.NextFloat(invGridSize);
