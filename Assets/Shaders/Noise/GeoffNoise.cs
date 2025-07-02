@@ -6,7 +6,9 @@
 #define private
 #define static
 #else
+using Unity.Collections;
 using Unity.Mathematics;
+using UnityEngine;
 using static Unity.Mathematics.math;
 
 namespace Decentraland.Terrain
@@ -616,6 +618,56 @@ namespace Decentraland.Terrain
 
             return float4(height, derivative);
         }
+
+        private static float3 ClampPosition(float3 PositionIn, float4 TerrainBounds)
+        {
+            return float3(
+                clamp(PositionIn.x, TerrainBounds.x, TerrainBounds.y),
+                PositionIn.y,
+                clamp(PositionIn.z, TerrainBounds.z, TerrainBounds.w));
+        }
+
+        #if !SHADER_TARGET
+        private static float SampleBilinearClamp(NativeArray<byte> texture, int2 textureSize, float2 uv)
+        {
+            uv = uv * textureSize - 0.5f;
+            int2 min = (int2)floor(uv);
+
+            // A quick prayer for Burst to SIMD this. 🙏
+            int4 index = clamp(min.y + int4(1, 1, 0, 0), 0, textureSize.y - 1) * textureSize.x +
+                         clamp(min.x + int4(0, 1, 1, 0), 0, textureSize.x - 1);
+
+            float2 t = frac(uv);
+            float top = lerp(texture[index.w], texture[index.z], t.x);
+            float bottom = lerp(texture[index.x], texture[index.y], t.x);
+            return lerp(top, bottom, t.y) * (1f / 255f);
+        }
+        #endif
+
+        #if !SHADER_TARGET
+        private static float GetOccupancy(NativeArray<byte> occupancyMap, int2 occupancyMapSize, float3 PositionIn, RectInt bounds, int parcelSize)
+        {
+            float2 scale = 1f / ((float2(bounds.width, bounds.height) + 2f) * parcelSize);
+
+            return SampleBilinearClamp(occupancyMap, occupancyMapSize, float2(
+                (PositionIn.x - (bounds.x - 1) * parcelSize) * scale.x,
+                (PositionIn.z - (bounds.y - 1) * parcelSize) * scale.y));
+        }
+        #endif
+
+        // // In the "worst case", if occupancy is 0.25, it can mean that the current vertex is on a corner
+        // // between one occupied parcel and three free ones, and height must be zero.
+        // if (occupancy < 0.25f)
+        // {
+        //     float height = GetHeight(PositionIn.x, PositionIn.z);
+        //     PositionIn.y = lerp(height, 0.0, occupancy * 4.0);
+        //     Normal = GetNormal(PositionIn.x, PositionIn.z);
+        // }
+        // else
+        // {
+        //     PositionIn.y = 0.0;
+        //     Normal = float3(0.0, 1.0, 0.0);
+        // }
 
         // ============================================================================
         // CPU USAGE FUNCTIONS
