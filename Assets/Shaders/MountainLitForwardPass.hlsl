@@ -134,9 +134,10 @@ void InitializeBakedGIData(Varyings input, inout InputData inputData)
 #endif
 }
 
-void CalculateNormalFromHeightmap(float2 uv, out float3 normalWS, out float3 tangentWS, out float3 bitangentWS)
+void CalculateNormalFromHeightmap(float2 uv, float fOccupancy, out float3 normalWS, out float3 tangentWS, out float3 bitangentWS)
 {
     float2 _Heightmap_TexelSize = float2(1.0f / 8192.0f, 1.0f / 8192.0f);
+
 
     // Sample the height at neighboring pixels
     float heightL = SAMPLE_TEXTURE2D_LOD(_HeightMap, sampler_HeightMap, uv + float2(-_Heightmap_TexelSize.x, 0), 0).r; // Left
@@ -146,8 +147,8 @@ void CalculateNormalFromHeightmap(float2 uv, out float3 normalWS, out float3 tan
 
     // Calculate the gradient in world space (Y is up in Unity)
     // Since each vertex is 1 meter apart, the horizontal distance is 2.0 (left to right)
-    float3 va = float3(2.0, (heightR - heightL) * _terrainHeight, 0.0); // X direction
-    float3 vb = float3(0.0, (heightU - heightD) * _terrainHeight, 2.0); // Z direction
+    float3 va = float3(2.0, lerp((heightR - heightL) * _terrainHeight, 0.0f, fOccupancy * 4.0), 0.0); // X direction
+    float3 vb = float3(0.0, lerp((heightU - heightD) * _terrainHeight, 0.0f, fOccupancy * 4.0), 2.0); // Z direction
     // Cross product to get the normal
     normalWS = normalize(cross(vb, va));
 
@@ -171,17 +172,22 @@ Varyings LitPassVertexSimple(Attributes input)
     UNITY_TRANSFER_INSTANCE_ID(input, output);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
-    VertexPositionInputs vertexInput = GetVertexPositionInputs_Mountain(input.positionOS.xyz, _TerrainBounds, output.heightDerivatives);
+    int ParcelSize = 16;
+    float fOccupancy = GetOccupancy(output.positionWS.xyz, _TerrainBounds, ParcelSize);
+    output.heightDerivatives = float4(0.0f, 0.0f, 0.0f, 0.0f);
+
+    VertexPositionInputs vertexInput = GetVertexPositionInputs_Mountain(input.positionOS.xyz, _TerrainBounds, fOccupancy, output.heightDerivatives);
     output.positionWS.xyz = vertexInput.positionWS;
 
+    VertexNormalInputs normalInput;
     if (_UseHeightMap > 0)
     {
         float2 heightUV = (output.positionWS.xz + 4096.0f) / 8192.0f;
         float3 normalWS;
         float3 tangentWS;
         float3 bitangentWS;
-        CalculateNormalFromHeightmap(heightUV, normalWS, tangentWS, bitangentWS);
-        VertexNormalInputs normalInput;
+
+        CalculateNormalFromHeightmap(heightUV, fOccupancy, normalWS, tangentWS, bitangentWS);
         normalInput.normalWS = normalWS;
         normalInput.tangentWS = tangentWS;
         normalInput.bitangentWS = bitangentWS;
@@ -191,7 +197,7 @@ Varyings LitPassVertexSimple(Attributes input)
         float3 normalOS = normalize(float3(output.heightDerivatives.y, 1.0, output.heightDerivatives.w));
         float4 tangentOS = float4(normalize(float3(1.0, output.heightDerivatives.y, 0.0)), 1.0);
         float3 bitangent = normalize(float3(0.0, output.heightDerivatives.w, 1.0));
-        VertexNormalInputs normalInput = GetVertexNormalInputs(normalOS, tangentOS);
+        normalInput = GetVertexNormalInputs(normalOS, tangentOS);
     }
 
 #if defined(_FOG_FRAGMENT)

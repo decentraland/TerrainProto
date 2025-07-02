@@ -20,10 +20,12 @@ float3 TerrainVertexAdjustment(float3 positionWS, out float4 heightDerivative)
     return positionWS;
 }
 
-VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 terrainBounds, out float4 heightDerivative)
+VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 terrainBounds, float fOccupancy, out float4 heightDerivative)
 {
     VertexPositionInputs input;
     input.positionWS = TransformObjectToWorld(positionOS);
+    input.positionWS = ClampPosition(input.positionWS, terrainBounds);
+    const int ParcelSize = 16;
 
     if (_UseHeightMap > 0)
     {
@@ -40,8 +42,17 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 
             heightDerivative2 = saturate(heightDerivative2);
         }
 
-        heightDerivative.x = heightDerivative2;
-        input.positionWS.y += heightDerivative.x * _terrainHeight;
+        // // In the "worst case", if occupancy is 0.25, it can mean that the current vertex is on a corner
+        // // between one occupied parcel and three free ones, and height must be zero.
+        if (fOccupancy < 0.25f)
+        {
+            heightDerivative.x = heightDerivative2;
+            input.positionWS.y += lerp(heightDerivative.x * _terrainHeight, 0.0, fOccupancy * 4.0);
+        }
+        else
+        {
+            input.positionWS.y = 0.0;
+        }
 
         if (false) // For Accuracy Testing
         {
@@ -58,10 +69,18 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 
     }
     else
     {
-        input.positionWS.x = clamp(input.positionWS.x, terrainBounds.x, terrainBounds.y);
-        input.positionWS.z = clamp(input.positionWS.z, terrainBounds.z, terrainBounds.w);
-        heightDerivative = getHeightAndNormal_int(input.positionWS.xz, _frequency, 0);
-        input.positionWS.y += heightDerivative.x * _terrainHeight;
+        // // In the "worst case", if occupancy is 0.25, it can mean that the current vertex is on a corner
+        // // between one occupied parcel and three free ones, and height must be zero.
+        if (fOccupancy < 0.25f)
+        {
+            float4 heightDerivative = getHeightAndNormal_int(input.positionWS.xz, _frequency, 0);
+            input.positionWS.y += lerp(heightDerivative.x * _terrainHeight, 0.0, fOccupancy * 4.0);
+        }
+        else
+        {
+            input.positionWS.y = 0.0;
+            heightDerivative.yzw = float3(0.0, 1.0, 0.0);
+        }
     }
 
     input.positionVS = TransformWorldToView(input.positionWS);

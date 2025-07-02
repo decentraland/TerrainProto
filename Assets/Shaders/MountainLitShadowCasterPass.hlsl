@@ -34,7 +34,7 @@ struct Varyings
 float4 GetShadowPositionHClip(Attributes input)
 {
     float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
-    float4 heightDerivative;
+    float4 heightDerivative = float4(0.0f, 0.0f, 0.0f, 0.0f);
     positionWS = TerrainVertexAdjustment( positionWS, heightDerivative);
     float3 normalOS = normalize(float3(-heightDerivative.x, 1.0, -heightDerivative.z));
     float3 normalWS = TransformObjectToWorldNormal(normalOS);

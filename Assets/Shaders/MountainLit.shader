@@ -18,6 +18,8 @@ Shader "DCL/MountainLit"
         _HeightMap("HeightMap", 2D) = "white" {}
         _UseHeightMap("Use HeightMap", Integer) = 0
 
+        _OccupancyMap("Occupancy Map", 2D) = "black" {}
+
         _terrainScale("Terrain Scale", Float) = 1.0      // Horizontal scale of terrain (e.g., 100.0)
         _TerrainBounds("Terrain Bounds", Vector) = (0.0, 0.0, 0.0, 0.0) // xmin, xmax, zmin, zmax
         _terrainHeight("Terrain Height", Float) = 10     // Maximum height displacement (e.g., 50.0)

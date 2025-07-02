@@ -99,6 +99,7 @@ void SetupDOTSSimpleLitMaterialPropertyCaches()
 TEXTURE2D(_SpecGlossMap);       SAMPLER(sampler_SpecGlossMap);
 TEXTURE2D(_BlendMap);           SAMPLER(sampler_BlendMap);
 TEXTURE2D(_HeightMap);          SAMPLER(sampler_HeightMap);
+TEXTURE2D(_OccupancyMap);       SAMPLER(sampler_OccupancyMap);
 
 half4 SampleSpecularSmoothness(float2 uv, half alpha, half4 specColor, TEXTURE2D_PARAM(specMap, sampler_specMap))
 {
@@ -134,6 +135,15 @@ inline void InitializeSimpleLitSurfaceData(float2 uv, out SurfaceData outSurface
     outSurfaceData.normalTS = SampleNormal(uv, TEXTURE2D_ARGS(_BumpMap, sampler_BumpMap));
     outSurfaceData.occlusion = 1.0;
     outSurfaceData.emission = SampleEmission(uv, _EmissionColor.rgb, TEXTURE2D_ARGS(_EmissionMap, sampler_EmissionMap));
+}
+
+float GetOccupancy(float3 PositionIn, float4 TerrainBounds, int ParcelSize)
+{
+    // The occupancy map has a 1 pixel border around the terrain.
+    float2 scale = float2(1.0f / (TerrainBounds.y - TerrainBounds.x + ParcelSize * 2.0f),
+    1.0f / (TerrainBounds.w - TerrainBounds.z + ParcelSize * 2.0f));
+
+    return SAMPLE_TEXTURE2D_LOD(_OccupancyMap, sampler_OccupancyMap, (PositionIn.xz - TerrainBounds.xz + ParcelSize) * scale, 0.0).r;
 }
 
 #endif
