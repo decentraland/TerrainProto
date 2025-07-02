@@ -114,8 +114,7 @@ namespace Decentraland.Terrain
                                 parcelData.treePrototypeIndex = -1;
                             }
 
-                            Random random = terrainData.GetRandom(parcel);
-                            GenerateTree(parcel, in terrainData, ref random, parcelData, state);
+                            GenerateTree(parcel, in terrainData, parcelData, state);
                         }
                     }
                     else
@@ -136,8 +135,7 @@ namespace Decentraland.Terrain
 
                         transform.SetParent(state.parent, true);
 
-                        Random random = terrainData.GetRandom(parcel);
-                        GenerateTree(parcel, in terrainData, ref random, parcelData, state);
+                        GenerateTree(parcel, in terrainData, parcelData, state);
                     }
                 }
             }
@@ -255,10 +253,10 @@ namespace Decentraland.Terrain
             return mesh;
         }
 
-        private static void GenerateTree(int2 parcel, in TerrainDataData terrainData, ref Random random,
+        private static void GenerateTree(int2 parcel, in TerrainDataData terrainData,
             ParcelData parcelData, TerrainColliderState state)
         {
-            if (!terrainData.NextTree(parcel, ref random, out float3 position, out float rotationY,
+            if (!terrainData.NextTree(parcel, out _, out float3 position, out float rotationY,
                     out int prototypeIndex))
             {
                 return;

@@ -799,12 +799,10 @@ namespace Decentraland.Terrain
                 if (!OverlapsClipVolume(bounds, clipBounds, clipPlanes))
                     return;
 
-                Random random = terrainData.GetRandom(parcel);
-
                 // Tree scattering
 
-                if (terrainData.NextTree(parcel, ref random, out float3 position, out float rotationY,
-                        out int prototypeIndex0))
+                if (terrainData.NextTree(parcel, out Random random, out float3 position,
+                        out float rotationY, out int prototypeIndex0))
                 {
                     int prototypeIndex = prototypeIndex0;
                     TreePrototypeData prototype = treePrototypes[prototypeIndex];

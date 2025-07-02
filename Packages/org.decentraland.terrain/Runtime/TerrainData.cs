@@ -41,7 +41,7 @@ namespace Decentraland.Terrain
                 CompileNoiseFunctions();
 
             return new TerrainDataData(ParcelSize, Bounds, MaxHeight, OccupancyMap, RandomSeed,
-                TreesPerParcel, TreePrototypes.Length, getHeight, getNormal);
+                TreesPerParcel, TreePrototypes, getHeight, getNormal);
         }
 
         private enum GroundMeshPiece : int
@@ -61,14 +61,15 @@ namespace Decentraland.Terrain
         private readonly int2 occupancyMapSize;
         private readonly uint randomSeed;
         private readonly float treesPerParcel;
-        private readonly int treePrototypeCount;
+        [ReadOnly, DeallocateOnJobCompletion]
+        private readonly NativeArray<TreePrototypeData> treePrototypes;
         private readonly FunctionPointer<GetHeightDelegate> getHeight;
         private readonly FunctionPointer<GetNormalDelegate> getNormal;
 
         private static NativeArray<byte> emptyOccupancyMap;
 
         public TerrainDataData(int parcelSize, RectInt bounds, float maxHeight, Texture2D occupancyMap,
-            uint randomSeed, float treesPerParcel, int treePrototypeCount,
+            uint randomSeed, float treesPerParcel, TreePrototype[] treePrototypes,
             FunctionPointer<GetHeightDelegate> getHeight, FunctionPointer<GetNormalDelegate> getNormal)
         {
             this.parcelSize = parcelSize;
@@ -76,7 +77,6 @@ namespace Decentraland.Terrain
             this.maxHeight = maxHeight;
             this.randomSeed = randomSeed;
             this.treesPerParcel = treesPerParcel;
-            this.treePrototypeCount = treePrototypeCount;
             this.getHeight = getHeight;
             this.getNormal = getNormal;
 
@@ -94,6 +94,12 @@ namespace Decentraland.Terrain
                 this.occupancyMap = emptyOccupancyMap;
                 occupancyMapSize = default;
             }
+
+            this.treePrototypes = new NativeArray<TreePrototypeData>(treePrototypes.Length,
+                Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+
+            for (int i = 0; i < treePrototypes.Length; i++)
+                this.treePrototypes[i] = new TreePrototypeData(treePrototypes[i]);
         }
 
         public float GetHeight(float x, float z)
@@ -167,25 +173,86 @@ namespace Decentraland.Terrain
             return occupancyMap[index] > 0;
         }
 
-        public bool NextTree(int2 parcel, ref Random random, out float3 position, out float rotationY,
+        private bool OverlapsNeighbor(int2 parcel, float2 positionXZ, float canopyRadius)
+        {
+            Random random = GetRandom(parcel);
+
+            if (random.NextFloat() >= treesPerParcel)
+                return false;
+
+            // This must be the same as in NextTree.
+            float2 neighborXZ = random.NextFloat2(parcelSize);
+            int prototypeIndex = random.NextInt(treePrototypes.Length);
+
+            float radiusSum = canopyRadius + treePrototypes[prototypeIndex].canopyRadius;
+
+            if (distancesq(positionXZ, neighborXZ) < radiusSum * radiusSum)
+                return true;
+
+            return false;
+        }
+
+        public bool NextTree(int2 parcel, out Random random, out float3 position, out float rotationY,
             out int prototypeIndex)
         {
-            if (treePrototypeCount > 0 && random.NextFloat() < treesPerParcel)
-            {
-                position.x = parcel.x * parcelSize + random.NextFloat(parcelSize);
-                position.z = parcel.y * parcelSize + random.NextFloat(parcelSize);
-                position.y = GetHeight(position.x, position.z);
-                rotationY = random.NextFloat(-180f, 180f);
-                prototypeIndex = random.NextInt(treePrototypeCount);
-                return true;
-            }
-            else
-            {
-                position = default;
-                rotationY = 0f;
-                prototypeIndex = -1;
+            random = GetRandom(parcel);
+            position = default;
+            rotationY = 0f;
+            prototypeIndex = -1;
+
+            if (treesPerParcel <= 0f || treePrototypes.Length == 0)
                 return false;
+
+            if (random.NextFloat() >= treesPerParcel)
+                return false;
+
+            // This must be the same as in OverlapsNeighbor.
+            float2 positionXZ = random.NextFloat2(parcelSize);
+            prototypeIndex = random.NextInt(treePrototypes.Length);
+
+            float canopyRadius = treePrototypes[prototypeIndex].canopyRadius;
+
+            if (positionXZ.x < canopyRadius)
+            {
+                if (IsOccupied(int2(parcel.x - 1, parcel.y)))
+                    return false;
+
+                if (OverlapsNeighbor(int2(parcel.x - 1, parcel.y), positionXZ, canopyRadius))
+                    return false;
+
+                if (positionXZ.y < canopyRadius)
+                {
+                    if (IsOccupied(int2(parcel.x - 1, parcel.y - 1)))
+                        return false;
+
+                    if (OverlapsNeighbor(int2(parcel.x - 1, parcel.y - 1), positionXZ, canopyRadius))
+                        return false;
+                }
             }
+
+            if (positionXZ.y < canopyRadius)
+            {
+                if (IsOccupied(int2(parcel.x, parcel.y - 1)))
+                    return false;
+
+                if (OverlapsNeighbor(int2(parcel.x, parcel.y - 1), positionXZ, canopyRadius))
+                    return false;
+
+                if (parcelSize - positionXZ.x < canopyRadius)
+                {
+                    if (IsOccupied(int2(parcel.x + 1, parcel.y - 1)))
+                        return false;
+
+                    if (OverlapsNeighbor(int2(parcel.x + 1, parcel.y - 1), positionXZ, canopyRadius))
+                        return false;
+                }
+            }
+
+            position.xz = positionXZ + parcel * parcelSize;
+            position.y = GetHeight(position.x, position.z);
+            rotationY = random.NextFloat(-180f, 180f);
+
+            return true;
         }
 
         internal RectInt PositionToParcelRect(float2 centerXZ, float radius)
@@ -209,6 +276,18 @@ namespace Decentraland.Terrain
             float top = lerp(texture[index.w], texture[index.z], t.x);
             float bottom = lerp(texture[index.x], texture[index.y], t.x);
             return lerp(top, bottom, t.y) * (1f / 255f);
+        }
+
+        private readonly struct TreePrototypeData
+        {
+            public readonly float trunkRadius;
+            public readonly float canopyRadius;
+
+            public TreePrototypeData(TreePrototype prototype)
+            {
+                trunkRadius = prototype.TrunkRadius;
+                canopyRadius = prototype.CanopyRadius;
+            }
         }
     }
 
@@ -249,6 +328,8 @@ namespace Decentraland.Terrain
         [field: SerializeField] public GameObject Source { get; private set; }
         [field: SerializeField] public GameObject Collider { get; internal set; }
         [field: SerializeField] public float LocalSize { get; internal set; }
+        [field: SerializeField] public float TrunkRadius { get; internal set; }
+        [field: SerializeField] public float CanopyRadius { get; internal set; }
         [field: SerializeField] public TreeLOD[] Lods { get; internal set; }
     }
 }
