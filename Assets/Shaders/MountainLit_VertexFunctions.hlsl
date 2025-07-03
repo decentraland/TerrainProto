@@ -5,27 +5,14 @@
 #include "Noise/GeoffNoise.cs"
 //#include "PerlinNoise.hlsl"
 
-float3 TerrainVertexAdjustment(float3 positionWS, out float4 heightDerivative)
-{
-    // // Get terrain height and derivatives at this position
-    // float4 terrainData = terrain(positionWS, _frequency, _octaves);
-    // float height = terrainData.x * _terrainHeight;
-    // heightDerivative = float4(terrainData.yzw * _terrainHeight, height);
-    //
-    // // Modify vertex position with terrain height
-    // positionWS *= _terrainScale;
-    // positionWS.y += height;
-
-    heightDerivative = float4(0,0,0,0);
-    return positionWS;
-}
-
-VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 terrainBounds, float fOccupancy, out float4 heightDerivative)
+VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 terrainBounds, out float fOccupancy, out float4 heightDerivative)
 {
     VertexPositionInputs input;
     input.positionWS = TransformObjectToWorld(positionOS);
     input.positionWS = ClampPosition(input.positionWS, terrainBounds);
+
     const int ParcelSize = 16;
+    fOccupancy = GetOccupancy(input.positionWS.xyz, terrainBounds, ParcelSize);
 
     if (_UseHeightMap > 0)
     {
@@ -73,7 +60,13 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 
         // // between one occupied parcel and three free ones, and height must be zero.
         if (fOccupancy < 0.25f)
         {
-            float4 heightDerivative = getHeightAndNormal_int(input.positionWS.xz, _frequency, 0);
+            const float TERRAIN_MIN = -0.9960938;
+            const float TERRAIN_MAX = 0.8615339;
+            const float TERRAIN_RANGE = 1.857628; // Pre-calculated
+            heightDerivative = terrain(input.positionWS.xyz, _frequency, _octaves);
+            heightDerivative.x = (heightDerivative.x - TERRAIN_MIN) / TERRAIN_RANGE;
+            heightDerivative.x = saturate(heightDerivative.x);
+            //input.positionWS.y += heightDerivative.x * _terrainHeight;
             input.positionWS.y += lerp(heightDerivative.x * _terrainHeight, 0.0, fOccupancy * 4.0);
         }
         else

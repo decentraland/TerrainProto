@@ -1,8 +1,9 @@
 ﻿using UnityEngine;
 using System.IO;
 using System.Collections.Generic;
+using UnityEditor;
 
-public class TerrainGeneratorWithAnalysis : MonoBehaviour
+public class TerrainGeneratorWithAnalysis : ScriptableWizard
 {
     [Header("Compute Shaders")]
     public ComputeShader terrainHeightOnlyShader; // Height only for BC4
@@ -60,7 +61,13 @@ public class TerrainGeneratorWithAnalysis : MonoBehaviour
 
     private bool isInitialized = false;
 
-    void Start()
+    [MenuItem("Tools/TerrainGenerator")]
+    static void MenuItem()
+    {
+        ScriptableWizard.DisplayWizard<TerrainGeneratorWithAnalysis>("Terrain Generator");
+    }
+
+    void OnWizardCreate()
     {
         InitializeShaders();
         GenerateOptimizedTerrain();
@@ -478,7 +485,7 @@ public class TerrainGeneratorWithAnalysis : MonoBehaviour
             }
         }
     }
-    
+
     void OnDestroy()
     {
         if (rawTexture != null) rawTexture.Release();

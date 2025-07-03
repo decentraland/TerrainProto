@@ -673,19 +673,42 @@ namespace Decentraland.Terrain
         // CPU USAGE FUNCTIONS
         // ============================================================================
 
+        // internal static float GetHeight(float x, float z)
+        // {
+        //     float frequencyCS = 0.21f;
+        //     float terrainHeight = 3.0f;
+        //
+        //     float terrainData = getHeight_optimised_int(float2(x, z), frequencyCS);
+        //     return terrainData * terrainHeight;
+        // }
+        //
+        // internal static float3 GetNormal(float x, float z)
+        // {
+        //     float frequencyCS = 0.21f;
+        //     return getNormal_optimised_int(float2(x, z), frequencyCS, 0);
+        // }
+
         internal static float GetHeight(float x, float z)
         {
-            float frequencyCS = 0.21f;
-            float terrainHeight = 3.0f;
+            float frequencyCS = 0.1f;
+            int octaves = 8;
+            float terrainHeight = 4.0f;
 
-            float terrainData = getHeight_optimised_int(float2(x, z), frequencyCS);
-            return terrainData * terrainHeight;
+            float TERRAIN_MIN = -0.9960938f;
+            float TERRAIN_MAX = 0.8251953f;
+            float TERRAIN_RANGE = 1.8212891f; // Pre-calculated
+
+            float4 terrainData = terrain( float3(x, 0.0f, z), frequencyCS, octaves);
+            float height = (terrainData.x - TERRAIN_MIN) / TERRAIN_RANGE;
+            height = saturate(height);
+            return height * terrainHeight;
         }
 
         internal static float3 GetNormal(float x, float z)
         {
-            float frequencyCS = 0.21f;
-            return getNormal_optimised_int(float2(x, z), frequencyCS, 0);
+            float frequencyCS = 0.001f;
+            int octaves = 8;
+            return terrain( float3(x, 0.0f, z), frequencyCS, octaves).yzw;
         }
 
 #if !SHADER_TARGET

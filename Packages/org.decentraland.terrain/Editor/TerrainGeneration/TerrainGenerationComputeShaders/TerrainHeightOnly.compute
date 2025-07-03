@@ -9,7 +9,7 @@ RWTexture2D<float4> Result;
 float4 _TerrainParams; // x: frequency, y: unused, z: octaves, w: unused
 uint2 _TextureSize;    // x: width, y: height
 
-#include "Assets/Shaders/PerlinNoise.hlsl"
+#include "Noise.hlsl"
 
 // ============================================================================
 // COMPUTE KERNEL

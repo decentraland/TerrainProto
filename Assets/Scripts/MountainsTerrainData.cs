@@ -18,10 +18,10 @@ namespace TerrainProto
 
         [BurstCompile, MonoPInvokeCallback(typeof(GetHeightDelegate))]
         private static float GetHeight(float x, float z) =>
-            MountainsNoise.GetHeight(x, z);
+            GeoffNoise.GetHeight(x, z);
 
         [BurstCompile, MonoPInvokeCallback(typeof(GetNormalDelegate))]
         private static void GetNormal(float x, float z, out float3 normal) =>
-            normal = MountainsNoise.GetNormal(x, z);
+            normal = GeoffNoise.GetNormal(x, z);
     }
 }
