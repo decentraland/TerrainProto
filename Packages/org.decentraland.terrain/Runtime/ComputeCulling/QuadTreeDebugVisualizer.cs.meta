@@ -1,0 +1,19 @@
+fileFormatVersion: 2
+guid: 5e57789d62c140e2896c4541f12667e2
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - quadTreeRenderTexture: {instanceID: 0}
+  - quadTreeRenderMaterial: {instanceID: 0}
+  - debugCamera: {instanceID: 0}
+  - quadTreeCullingShader: {fileID: 7200000, guid: 1ffe6570cfbb43f78f6b2beb126b69bc, type: 3}
+  - clearQuadTreeTextureShader: {fileID: 7200000, guid: 9b2a514619914a7f87a32e7bf6d7b9c3, type: 3}
+  - renderQuadTreeTextureShader: {fileID: 7200000, guid: 9b2a514619914a7f87a32e7bf6d7b9c3, type: 3}
+  - ScatterGrassShader: {fileID: 7200000, guid: a08d70e37ff645da89433c194594339a, type: 3}
+  - HeightMapTexture: {fileID: 2800000, guid: b15e509b80445d94b92a2d38a4c493a6, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

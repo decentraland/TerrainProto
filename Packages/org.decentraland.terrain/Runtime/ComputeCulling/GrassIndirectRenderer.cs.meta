@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 07879479ffaf4ff4b77cd64f47113fb6
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - quadTreeCullingShader: {fileID: 7200000, guid: 1ffe6570cfbb43f78f6b2beb126b69bc, type: 3}
+  - ScatterGrassShader: {fileID: 7200000, guid: a08d70e37ff645da89433c194594339a, type: 3}
+  - HeightMapTexture: {fileID: 2800000, guid: b15e509b80445d94b92a2d38a4c493a6, type: 3}
+  - OccupancyMap: {fileID: 2800000, guid: 3fb0d1129424bdb40a89f785c5ec75a8, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

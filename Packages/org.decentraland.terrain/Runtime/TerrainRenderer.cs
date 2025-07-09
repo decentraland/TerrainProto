@@ -15,9 +15,11 @@ using Random = Unity.Mathematics.Random;
 namespace Decentraland.Terrain
 {
     [ExecuteAlways]
+    [RequireComponent(typeof(GrassIndirectRenderer))]
     public sealed class TerrainRenderer : MonoBehaviour
     {
         [field: SerializeField] private TerrainData TerrainData { get; set; }
+        [field: SerializeField] private GrassIndirectRenderer grassIndirectRenderer { get; set; }
 
         private static readonly Vector3[] CLIP_CORNERS =
         {
@@ -36,6 +38,17 @@ namespace Decentraland.Terrain
         internal int GroundInstanceCount { get; private set; }
         internal int TreeInstanceCount { get; private set; }
 #endif
+
+        public void Awake()
+        {
+            grassIndirectRenderer = GetComponent<GrassIndirectRenderer>();
+        }
+
+        public void Start()
+        {
+            grassIndirectRenderer.GenerateQuadTree();
+            grassIndirectRenderer.SetupComputeBuffers();
+        }
 
         private void Update()
         {
@@ -75,6 +88,15 @@ namespace Decentraland.Terrain
                 false
 #endif
             );
+
+            if (grassIndirectRenderer != null && false)
+            {
+                grassIndirectRenderer.RunFrustumCulling();
+                grassIndirectRenderer.GenerateScatteredGrass();
+                DetailPrototype prototype = TerrainData.DetailPrototypes[0];
+                grassIndirectRenderer.SetMeshAndMaterial(prototype.Mesh, prototype.Material);
+                grassIndirectRenderer.RenderGrass();
+            }
         }
 
         private void OnDrawGizmosSelected()

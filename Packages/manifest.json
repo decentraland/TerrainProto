@@ -3,6 +3,6 @@
     "com.unity.ide.rider": "3.0.36",
     "com.unity.inputsystem": "1.14.0",
     "com.unity.render-pipelines.universal": "17.0.4",
-    "decentraland.grassshader": "git@github.com:decentraland/unity-explorer-packages.git?path=/StylizedGrassShader"
+    "decentraland.grassshader": "git@github.com:decentraland/unity-explorer-packages.git?path=/StylizedGrassShader#feat/grassindirect"
   }
 }
