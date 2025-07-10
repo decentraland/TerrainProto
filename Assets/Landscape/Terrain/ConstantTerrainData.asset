@@ -1,0 +1,55 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bcbb57a947c84900a389d72a0bf3398c, type: 3}
+  m_Name: ConstantTerrainData
+  m_EditorClassIdentifier: 
+  <RandomSeed>k__BackingField: 3141592653
+  <GroundMaterial>k__BackingField: {fileID: 2100000, guid: 76f6cda36f33ede4fb8b0f1f360165a7, type: 2}
+  <ParcelSize>k__BackingField: 16
+  <Bounds>k__BackingField:
+    x: -150
+    y: -150
+    width: 314
+    height: 309
+  <MaxHeight>k__BackingField: 40
+  <OccupancyMap>k__BackingField: {fileID: 2800000, guid: 3fb0d1129424bdb40a89f785c5ec75a8, type: 3}
+  <TreesPerParcel>k__BackingField: 0.2
+  <DetailDistance>k__BackingField: 200
+  <RenderGround>k__BackingField: 1
+  <RenderTreesAndDetail>k__BackingField: 1
+  <GroundInstanceCapacity>k__BackingField: 80
+  <TreeInstanceCapacity>k__BackingField: 3000
+  <DetailInstanceCapacity>k__BackingField: 40000
+  <GroundMeshes>k__BackingField:
+  - {fileID: 1394718660543912083, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
+  - {fileID: 2474922959326173943, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
+  - {fileID: -3615330361707025511, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
+  <TreePrototypes>k__BackingField:
+  - <Source>k__BackingField: {fileID: 7088211124069903763, guid: a579994199f719143991a656821e99ba, type: 3}
+    <Collider>k__BackingField: {fileID: 1205069210736854335, guid: 11a707b17c5787d448539ca562c8404c, type: 3}
+    <LocalSize>k__BackingField: 100
+    <TrunkRadius>k__BackingField: 0
+    <CanopyRadius>k__BackingField: 0
+    <Lods>k__BackingField:
+    - <Mesh>k__BackingField: {fileID: -7515708219630606215, guid: 9ddca728df9c124449d9b86a651b3896, type: 3}
+      <MinScreenSize>k__BackingField: 0.05350165
+      <Materials>k__BackingField:
+      - {fileID: 2100000, guid: f50d7baa6b3e33c47b09d40387bdc634, type: 2}
+    - <Mesh>k__BackingField: {fileID: 4772238169430402490, guid: 9ddca728df9c124449d9b86a651b3896, type: 3}
+      <MinScreenSize>k__BackingField: 0.03484897
+      <Materials>k__BackingField:
+      - {fileID: 2100000, guid: f50d7baa6b3e33c47b09d40387bdc634, type: 2}
+    - <Mesh>k__BackingField: {fileID: 2289415448551767133, guid: 9ddca728df9c124449d9b86a651b3896, type: 3}
+      <MinScreenSize>k__BackingField: 0.021002172
+      <Materials>k__BackingField:
+      - {fileID: 2100000, guid: f50d7baa6b3e33c47b09d40387bdc634, type: 2}
+  <DetailPrototypes>k__BackingField: []

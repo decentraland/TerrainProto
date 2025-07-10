@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: MountainsTerrainData
   m_EditorClassIdentifier: 
   <RandomSeed>k__BackingField: 3141592653
-  <GroundMaterial>k__BackingField: {fileID: 2100000, guid: 7e6b9dea3fa74574aa8dc9c031f42a71, type: 2}
+  <GroundMaterial>k__BackingField: {fileID: 2100000, guid: 76f6cda36f33ede4fb8b0f1f360165a7, type: 2}
   <ParcelSize>k__BackingField: 16
   <Bounds>k__BackingField:
     x: -150
@@ -25,7 +25,7 @@ MonoBehaviour:
   <TreesPerParcel>k__BackingField: 1
   <DetailDistance>k__BackingField: 200
   <RenderGround>k__BackingField: 1
-  <RenderTreesAndDetail>k__BackingField: 1
+  <RenderTreesAndDetail>k__BackingField: 0
   <GroundInstanceCapacity>k__BackingField: 80
   <TreeInstanceCapacity>k__BackingField: 3000
   <DetailInstanceCapacity>k__BackingField: 40000

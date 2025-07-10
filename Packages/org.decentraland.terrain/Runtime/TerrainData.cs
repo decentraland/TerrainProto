@@ -2,6 +2,7 @@ using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
+using Unity.Mathematics.Geometry;
 using UnityEngine;
 using static Unity.Mathematics.math;
 using Random = Unity.Mathematics.Random;
@@ -55,16 +56,17 @@ namespace Decentraland.Terrain
     internal readonly struct TerrainDataData
     {
         public readonly int parcelSize;
-        public readonly RectInt bounds;
         public readonly float maxHeight;
         [ReadOnly] private readonly NativeArray<byte> occupancyMap;
-        private readonly int2 occupancyMapSize;
+        private readonly int occupancyMapSize;
         private readonly uint randomSeed;
         private readonly float treesPerParcel;
-        [ReadOnly, DeallocateOnJobCompletion]
-        private readonly NativeArray<TreePrototypeData> treePrototypes;
+        [ReadOnly, DeallocateOnJobCompletion] private readonly NativeArray<TreePrototypeData> treePrototypes;
         private readonly FunctionPointer<GetHeightDelegate> getHeight;
         private readonly FunctionPointer<GetNormalDelegate> getNormal;
+
+        /// <summary>xy = min, zw = max, size = max - min</summary>
+        public readonly int4 bounds;
 
         private static NativeArray<byte> emptyOccupancyMap;
 
@@ -73,17 +75,16 @@ namespace Decentraland.Terrain
             FunctionPointer<GetHeightDelegate> getHeight, FunctionPointer<GetNormalDelegate> getNormal)
         {
             this.parcelSize = parcelSize;
-            this.bounds = bounds;
+            this.bounds = int4(bounds.xMin, bounds.yMin, bounds.xMax, bounds.yMax);
             this.maxHeight = maxHeight;
             this.randomSeed = randomSeed;
             this.treesPerParcel = treesPerParcel;
             this.getHeight = getHeight;
             this.getNormal = getNormal;
 
-            if (occupancyMap != null)
+            if (IsPowerOfTwo(occupancyMap, out occupancyMapSize))
             {
                 this.occupancyMap = occupancyMap.GetRawTextureData<byte>();
-                occupancyMapSize = int2(occupancyMap.width, occupancyMap.height);
             }
             else
             {
@@ -92,7 +93,6 @@ namespace Decentraland.Terrain
                         NativeArrayOptions.UninitializedMemory);
 
                 this.occupancyMap = emptyOccupancyMap;
-                occupancyMapSize = default;
             }
 
             this.treePrototypes = new NativeArray<TreePrototypeData>(treePrototypes.Length,
@@ -102,18 +102,20 @@ namespace Decentraland.Terrain
                 this.treePrototypes[i] = new TreePrototypeData(treePrototypes[i]);
         }
 
+        public bool BoundsOverlaps(int4 bounds) =>
+            all(this.bounds.zw >= bounds.xy & this.bounds.xy <= bounds.zw);
+
         public float GetHeight(float x, float z)
         {
             float occupancy;
 
-            if (occupancyMapSize.x > 0)
+            if (occupancyMapSize > 0)
             {
-                // The occupancy map is assumed to have a 1 pixel border around the terrain.
-                float2 scale = 1f / ((float2(bounds.width, bounds.height) + 2f) * parcelSize);
-
-                occupancy = SampleBilinearClamp(occupancyMap, occupancyMapSize, float2(
-                    (x - (bounds.x - 1) * parcelSize) * scale.x,
-                    (z - (bounds.y - 1) * parcelSize) * scale.y));
+                // Take the bounds of the terrain, put a single pixel border around it, increase the
+                // size to the next power of two, map xz=0,0 to uv=0.5,0.5 and parcelSize to pixel size,
+                // and that's the occupancy map.
+                float2 uv = (float2(x, z) / parcelSize + occupancyMapSize * 0.5f) / occupancyMapSize;
+                occupancy = SampleBilinearClamp(occupancyMap, occupancyMapSize, uv);
             }
             else
             {
@@ -156,21 +158,58 @@ namespace Decentraland.Terrain
             return new Random(seed != 0 ? seed : 0x6487ed51);
         }
 
+        private static bool IsPowerOfTwo(Texture2D texture, out int size)
+        {
+            if (texture != null)
+            {
+                int width = texture.width;
+
+                if (ispow2(width) && texture.height == width)
+                {
+                    size = width;
+                    return true;
+                }
+            }
+
+            size = 0;
+            return false;
+        }
+
         public bool IsOccupied(int2 parcel)
         {
-            if (occupancyMapSize.x == 0)
+            if (occupancyMapSize <= 0)
                 return false;
 
-            if (parcel.x < bounds.x || parcel.y < bounds.y)
+            if (parcel.x < bounds.x || parcel.y < bounds.y
+                                    || parcel.x >= bounds.z || parcel.y >= bounds.w)
+            {
                 return true;
+            }
 
-            Vector2Int max = bounds.max;
-
-            if (parcel.x >= max.x || parcel.y >= max.y)
-                return true;
-
-            int index = (parcel.y - bounds.y + 1) * occupancyMapSize.x + parcel.x - bounds.x + 1;
+            parcel += occupancyMapSize / 2;
+            int index = parcel.y * occupancyMapSize + parcel.x;
             return occupancyMap[index] > 0;
+        }
+
+        public bool OverlapsClipVolume(int2 parcel, NativeArray<ClipPlane> clipPlanes)
+        {
+            // Because parcels are small relative to the camera frustum and their size stays
+            // constant, there's no need to test against frustum bounds.
+
+            int2 min = parcel * parcelSize;
+            int2 max = min + parcelSize;
+            var bounds = new MinMaxAABB(float3(min.x, 0f, min.y), float3(max.x, maxHeight, max.y));
+
+            for (int i = 0; i < clipPlanes.Length; i++)
+            {
+                ClipPlane clipPlane = clipPlanes[i];
+                float3 farCorner = bounds.GetCorner(clipPlane.farCornerIndex);
+
+                if (clipPlane.plane.SignedDistanceToPoint(farCorner) < 0f)
+                    return false;
+            }
+
+            return true;
         }
 
         private bool OverlapsNeighbor(int2 parcel, float2 positionXZ, float canopyRadius)
@@ -210,7 +249,7 @@ namespace Decentraland.Terrain
             float2 positionXZ = random.NextFloat2(parcelSize);
             prototypeIndex = random.NextInt(treePrototypes.Length);
 
-            float canopyRadius = treePrototypes[prototypeIndex].canopyRadius;
+            /*float canopyRadius = treePrototypes[prototypeIndex].canopyRadius;
 
             if (positionXZ.x < canopyRadius)
             {
@@ -246,7 +285,7 @@ namespace Decentraland.Terrain
                     if (OverlapsNeighbor(int2(parcel.x + 1, parcel.y - 1), positionXZ, canopyRadius))
                         return false;
                 }
-            }
+            }*/
 
             position.xz = positionXZ + parcel * parcelSize;
             position.y = GetHeight(position.x, position.z);

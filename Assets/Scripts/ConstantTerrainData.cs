@@ -8,7 +8,7 @@ using TerrainData = Decentraland.Terrain.TerrainData;
 namespace TerrainProto
 {
     [BurstCompile, CreateAssetMenu]
-    public sealed class MountainsTerrainData : TerrainData
+    public sealed class ConstantTerrainData : TerrainData
     {
         protected override void CompileNoiseFunctions()
         {
@@ -18,10 +18,10 @@ namespace TerrainProto
 
         [BurstCompile, MonoPInvokeCallback(typeof(GetHeightDelegate))]
         private static float GetHeight(float x, float z) =>
-            MountainsNoise.GetHeight(x, z);
+            ConstantNoise.GetHeight(x, z);
 
         [BurstCompile, MonoPInvokeCallback(typeof(GetNormalDelegate))]
         private static void GetNormal(float x, float z, out float3 normal) =>
-            normal = MountainsNoise.GetNormal(x, z);
+            normal = ConstantNoise.GetNormal(x, z);
     }
 }

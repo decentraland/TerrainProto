@@ -9,7 +9,6 @@ using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using static Decentraland.Terrain.TerrainLog;
 using static Unity.Mathematics.math;
-using Plane = Unity.Mathematics.Geometry.Plane;
 using Random = Unity.Mathematics.Random;
 
 namespace Decentraland.Terrain
@@ -30,7 +29,7 @@ namespace Decentraland.Terrain
         private static MaterialPropertyBlock groundMatProps;
         private static NativeArray<int4> magicPattern;
         private static readonly int OCCUPANCY_MAP_ID = Shader.PropertyToID("_OccupancyMap");
-        private static readonly int PARCEL_SIZE_ID = Shader.PropertyToID("_ParcelSize");
+        private static readonly int INV_PARCEL_SIZE_ID = Shader.PropertyToID("_InvParcelSize");
         private static readonly int TERRAIN_BOUNDS_ID = Shader.PropertyToID("_TerrainBounds");
 
 #if UNITY_EDITOR
@@ -276,6 +275,11 @@ namespace Decentraland.Terrain
 
             if (renderTreesAndDetail)
             {
+                int2 min = (int2)floor(clipBounds.Min.xz / terrainData.ParcelSize);
+                int2 size = (int2)ceil(clipBounds.Max.xz / terrainData.ParcelSize) - min;
+                RectInt clipRect = new RectInt(min.x, min.y, size.x, size.y);
+                clipRect.ClampToBounds(terrainData.Bounds);
+
                 // Deallocated by ScatterObjectsJob
                 var treePrototypes = new NativeArray<TreePrototypeData>(
                     terrainData.TreePrototypes.Length, Allocator.TempJob,
@@ -345,7 +349,8 @@ namespace Decentraland.Terrain
                     terrainData = terrainData.GetData(),
                     detailSqrDistance = terrainData.DetailDistance * terrainData.DetailDistance,
                     cameraPosition = cameraPosition,
-                    clipBounds = clipBounds,
+                    clipRectMin = int2(clipRect.x, clipRect.y),
+                    clipRectSizeX = clipRect.width,
                     clipPlanes = clipPlanes,
                     treePrototypes = treePrototypes,
                     treeLods = treeLods,
@@ -354,10 +359,7 @@ namespace Decentraland.Terrain
                     detailInstances = detailInstances.AsParallelWriter()
                 };
 
-                Vector2Int terrainSize = terrainData.Bounds.size;
-                int parcelCount = terrainSize.x * terrainSize.y;
-
-                scatterObjects = scatterObjectsJob.Schedule(parcelCount);
+                scatterObjects = scatterObjectsJob.Schedule(clipRect.width * clipRect.height);
 
                 treeInstanceCounts = new NativeArray<int>(treeMeshCount, Allocator.TempJob);
                 treeTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
@@ -538,7 +540,7 @@ namespace Decentraland.Terrain
             else
                 groundMatProps.Clear();
 
-            groundMatProps.SetFloat(PARCEL_SIZE_ID, terrainData.ParcelSize);
+            groundMatProps.SetFloat(INV_PARCEL_SIZE_ID, 1f / terrainData.ParcelSize);
             groundMatProps.SetVector(TERRAIN_BOUNDS_ID, bounds * terrainData.ParcelSize);
 
             int startInstance = 0;
@@ -684,7 +686,7 @@ namespace Decentraland.Terrain
                 if (!OverlapsClipVolume(bounds, clipBounds, clipPlanes))
                     return false;
 
-                if (!terrainData.bounds.Overlaps(new RectInt(min.x, min.y, scale, scale)))
+                if (!terrainData.BoundsOverlaps(int4(min, scale, scale)))
                     // Skip this instance, but keep generating. The case to consider is when the camera
                     // is far outside the bounds of the terrain.
                     return true;
@@ -795,7 +797,8 @@ namespace Decentraland.Terrain
             public TerrainDataData terrainData;
             public float detailSqrDistance;
             public float3 cameraPosition;
-            public MinMaxAABB clipBounds;
+            public int2 clipRectMin;
+            public int clipRectSizeX;
             [ReadOnly] public NativeArray<ClipPlane> clipPlanes;
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreePrototypeData> treePrototypes;
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreeLODData> treeLods;
@@ -805,21 +808,13 @@ namespace Decentraland.Terrain
 
             public void Execute(int index)
             {
-                int2 parcel = int2(
-                    index % terrainData.bounds.width + terrainData.bounds.x,
-                    index / terrainData.bounds.width + terrainData.bounds.y);
+                int2 parcel = int2(index % clipRectSizeX, index / clipRectSizeX) + clipRectMin;
 
-                if (terrainData.IsOccupied(parcel))
+                if (terrainData.IsOccupied(parcel)
+                    || !terrainData.OverlapsClipVolume(parcel, clipPlanes))
+                {
                     return;
-
-                int2 min = parcel * terrainData.parcelSize;
-                int2 max = min + terrainData.parcelSize;
-
-                var bounds = new MinMaxAABB(float3(min.x, 0f, min.y),
-                    float3(max.x, terrainData.maxHeight, max.y));
-
-                if (!OverlapsClipVolume(bounds, clipBounds, clipPlanes))
-                    return;
+                }
 
                 // Tree scattering
 
@@ -851,7 +846,12 @@ namespace Decentraland.Terrain
 
                 // Detail scattering
 
-                if (distancesq(bounds.Center, cameraPosition) < detailSqrDistance)
+                float3 parcelCenter;
+                parcelCenter.x = (parcel.x + 0.5f) * terrainData.parcelSize;
+                parcelCenter.z = (parcel.y + 0.5f) * terrainData.parcelSize;
+                parcelCenter.y = terrainData.GetHeight(parcelCenter.x, parcelCenter.z);
+
+                if (distancesq(parcelCenter, cameraPosition) < detailSqrDistance)
                 {
                     for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
                     {
@@ -911,31 +911,6 @@ namespace Decentraland.Terrain
                 }
 
                 return true;
-            }
-        }
-
-        private struct ClipPlane
-        {
-            public Plane plane;
-            public int farCornerIndex;
-
-            public ClipPlane(float4 coefficients)
-            {
-                plane = new Plane() { NormalAndDistance = Plane.Normalize(coefficients) };
-                if (plane.NormalAndDistance.x < 0f)
-                {
-                    if (plane.NormalAndDistance.y < 0f)
-                        farCornerIndex = plane.NormalAndDistance.z < 0f ? 0b000 : 0b001;
-                    else
-                        farCornerIndex = plane.NormalAndDistance.z < 0f ? 0b010 : 0b011;
-                }
-                else
-                {
-                    if (plane.NormalAndDistance.y < 0f)
-                        farCornerIndex = plane.NormalAndDistance.z < 0f ? 0b100 : 0b101;
-                    else
-                        farCornerIndex = plane.NormalAndDistance.z < 0f ? 0b110 : 0b111;
-                }
             }
         }
 

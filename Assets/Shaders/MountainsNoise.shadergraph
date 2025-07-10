@@ -600,11 +600,11 @@
     "m_Guid": {
         "m_GuidSerialized": "51cbe4a4-d796-47d1-b883-f1fcbffeffa8"
     },
-    "m_Name": "Parcel Size",
+    "m_Name": "Inverse Parcel Size",
     "m_DefaultRefNameVersion": 1,
-    "m_RefNameGeneratedByDisplayName": "Parcel Size",
-    "m_DefaultReferenceName": "_Parcel_Size",
-    "m_OverrideReferenceName": "_ParcelSize",
+    "m_RefNameGeneratedByDisplayName": "Inverse Parcel Size",
+    "m_DefaultReferenceName": "_Inverse_Parcel_Size",
+    "m_OverrideReferenceName": "_InvParcelSize",
     "m_GeneratePropertyBlock": true,
     "m_UseCustomSlotLabel": false,
     "m_CustomSlotLabel": "",
@@ -1968,7 +1968,7 @@
     "m_Type": "UnityEditor.ShaderGraph.Vector1MaterialSlot",
     "m_ObjectId": "aa30da2fe8f949f081428f057f97ed90",
     "m_Id": 0,
-    "m_DisplayName": "Parcel Size",
+    "m_DisplayName": "Inverse Parcel Size",
     "m_SlotType": 1,
     "m_Hidden": false,
     "m_ShaderOutputName": "Out",
@@ -2344,10 +2344,10 @@
         "m_Expanded": true,
         "m_Position": {
             "serializedVersion": "2",
-            "x": -1710.400146484375,
-            "y": 6.400081157684326,
-            "width": 132.8001708984375,
-            "height": 33.599937438964847
+            "x": -1751.2001953125,
+            "y": 0.8000056743621826,
+            "width": 174.39990234375,
+            "height": 33.60001754760742
         }
     },
     "m_Slots": [
