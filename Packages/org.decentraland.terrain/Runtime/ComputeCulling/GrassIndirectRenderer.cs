@@ -14,8 +14,8 @@ public class GrassIndirectRenderer : MonoBehaviour
 
     public struct PerInst
     {
-        public float3 position;
-        public float rotationXY;
+        public float4 position;
+        public float4 quatRotation;
     }
 
     private int renderTextureSize = 512;

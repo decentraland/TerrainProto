@@ -50,7 +50,7 @@ void HierarchicalQuadTreeCulling(uint3 id : SV_DispatchThreadID, uint3 groupId :
     if (IsFrustumCulled(BoundingBox) == false)
     {
         float fOccupancy = GetOccupancy(float3(plot.x * 16, 0, plot.y * 16), TerrainBounds, 16);
-        if(fOccupancy < 0.5f)
+        if(fOccupancy < 0.5f || true)
         {
             uint outputIndex;
             InterlockedAdd(visibleParcelCount[0], 1, outputIndex);

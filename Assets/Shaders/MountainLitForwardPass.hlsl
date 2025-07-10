@@ -139,7 +139,6 @@ void CalculateNormalFromHeightmap(float2 uv, float fOccupancy, out float3 normal
 {
     float2 _Heightmap_TexelSize = float2(1.0f / 8192.0f, 1.0f / 8192.0f);
 
-
     // Sample the height at neighboring pixels
     float heightL = SAMPLE_TEXTURE2D_LOD(_HeightMap, sampler_HeightMap, uv + float2(-_Heightmap_TexelSize.x, 0), 0).r; // Left
     float heightR = SAMPLE_TEXTURE2D_LOD(_HeightMap, sampler_HeightMap, uv + float2(_Heightmap_TexelSize.x, 0), 0).r;  // Right

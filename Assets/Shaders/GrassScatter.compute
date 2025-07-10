@@ -4,14 +4,15 @@
 
 struct PerInst
 {
-    float3 position;
-    float rotationXY;
+    float4 position;
+    float4 quatRotation;
 };
 
 cbuffer ConstBuffer : register(b0)
 {
     float4 TerrainBounds;
     float TerrainHeight;
+    uint parcelSize;
 }
 
 Texture2D<float4> HeightMapTexture : register(t0);
@@ -19,6 +20,7 @@ Texture2D<float4> OccupancyTexture : register(t1);
 
 SamplerState samplerHeightMapTexture : register(s0);
 SamplerState samplerOccupancyTexture : register(s1);
+SamplerState HeightMapTexturePointClampSampler : register(s2);
 
 StructuredBuffer<int2> visibleParcels : register(t2);
 StructuredBuffer<uint> visibleParcelCount : register(t3);
@@ -71,6 +73,79 @@ inline void UnpackTwoBytes(half packedValue, out uint value1, out uint value2)
     value2 = packed & 0xFF;
 }
 
+float CalculateHeightFromHeightmap(float2 uv, float terrainHeight, float fOccupancy)
+{
+    float _Heightmap_TexelSize = 1.0f / 8192.0f;
+
+    // Sample the height at neighboring pixels
+    float height00 = HeightMapTexture.SampleLevel(HeightMapTexturePointClampSampler, uv + float2(0, 0), 0).r;
+    float height10 = HeightMapTexture.SampleLevel(HeightMapTexturePointClampSampler, uv + float2(_Heightmap_TexelSize, 0), 0).r;
+    float height01 = HeightMapTexture.SampleLevel(HeightMapTexturePointClampSampler, uv + float2(0, _Heightmap_TexelSize), 0).r;
+    float height11 = HeightMapTexture.SampleLevel(HeightMapTexturePointClampSampler, uv + float2(_Heightmap_TexelSize, _Heightmap_TexelSize), 0).r;
+
+    float height = (height00 + height10 + height01 + height11) * 0.25f;
+    height = lerp(height * terrainHeight, 0.0, fOccupancy * 4.0);
+    return height;
+}
+
+float3 CalculateNormalFromHeightmap(float2 uv, float terrainHeight, float fOccupancy)
+{
+    float _Heightmap_TexelSize = 1.0f / 8192.0f;
+
+    // Sample the height at neighboring pixels
+    float height00 = HeightMapTexture.SampleLevel(samplerHeightMapTexture, uv + float2(0, 0), 0).r;
+    float height10 = HeightMapTexture.SampleLevel(samplerHeightMapTexture, uv + float2(_Heightmap_TexelSize, 0), 0).r;
+    float height01 = HeightMapTexture.SampleLevel(samplerHeightMapTexture, uv + float2(0, _Heightmap_TexelSize), 0).r;
+    float height11 = HeightMapTexture.SampleLevel(samplerHeightMapTexture, uv + float2(_Heightmap_TexelSize, _Heightmap_TexelSize), 0).r;
+
+    // Calculate the gradient in world space (Y is up in Unity)
+    // Since each vertex is 1 meter apart, the horizontal distance is 2.0 (left to right)
+    float3 va = float3(2.0, lerp((height10 - height01) * terrainHeight, 0.0f, fOccupancy * 4.0), 0.0); // X direction
+    float3 vb = float3(0.0, lerp((height00 - height11) * terrainHeight, 0.0f, fOccupancy * 4.0), 2.0); // Z direction
+    // Cross product to get the normal
+    return normalize(cross(vb, va));
+}
+
+// Create quaternion from Y-axis rotation
+float4 QuaternionFromYRotation(float angleRadians)
+{
+    float halfAngle = angleRadians * 0.5;
+    return float4(0, sin(halfAngle), 0, cos(halfAngle));
+}
+
+// Calculate quaternion from terrain normal
+inline float4 QuaternionFromToRotation(float3 from, float3 to)
+{
+    float3 cross_vec = cross(from, to);
+    float dot_product = dot(from, to);
+    float s = sqrt((1.0 + dot_product) * 2.0);
+    float3 xyz = cross_vec / s;
+    float w = s * 0.5;
+    return float4(xyz, w);
+}
+
+// Multiply two quaternions (q1 * q2)
+float4 QuaternionMultiply(float4 q1, float4 q2)
+{
+    return float4(
+        q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y,
+        q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x,
+        q1.w * q2.z + q1.x * q2.y - q1.y * q2.x + q1.z * q2.w,
+        q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z
+    );
+}
+
+// Create combined quaternion: Y rotation then terrain alignment
+float4 CreateGrassRotationQuaternion(float3 terrainNormal, float yRotationAngle)
+{
+    float4 yRotation = QuaternionFromYRotation(yRotationAngle);
+    float3 up = float3(0, 1, 0);
+    float4 terrainAlignment = QuaternionFromToRotation(up, terrainNormal);
+
+    // Apply Y rotation first, then terrain alignment
+    return QuaternionMultiply(terrainAlignment, yRotation);
+}
+
 inline float GetOccupancy(float3 PositionIn, float4 TerrainBounds, int ParcelSize)
 {
     // The occupancy map has a 1 pixel border around the terrain.
@@ -79,7 +154,6 @@ inline float GetOccupancy(float3 PositionIn, float4 TerrainBounds, int ParcelSiz
 
     return OccupancyTexture.SampleLevel(samplerOccupancyTexture, (PositionIn.xz - TerrainBounds.xz + ParcelSize) * scale, 0.0).r;
 }
-
 
 [numthreads(256, 1, 1)]
 void ScatterGrass(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint3 localId : SV_GroupThreadID)
@@ -97,12 +171,14 @@ void ScatterGrass(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, ui
     float2 worldSpaceCoord = corner0 + float2(random_X, random_Z);
     float2 UV_coords = (worldSpaceCoord + 4096.0f) / 8192.0f;
 
-    half height = HeightMapTexture.SampleLevel(samplerHeightMapTexture, UV_coords, 0).x * 4.0f;
-    float fOccupancy = GetOccupancy(float3(worldSpaceCoord.x, 0.0, worldSpaceCoord.y), TerrainBounds, 16);
-    height = lerp(height * TerrainHeight, 0.0, fOccupancy * 4.0);
-    perInst.position = half3(random_X, height, random_Z);
+    //float height = HeightMapTexture.SampleLevel(samplerHeightMapTexture, UV_coords, 0).x;
+    float fOccupancy = GetOccupancy(float3(worldSpaceCoord.x, 0.0, worldSpaceCoord.y), TerrainBounds, parcelSize);
+    float height = CalculateHeightFromHeightmap(UV_coords, TerrainHeight, fOccupancy);
+    //height = lerp(height * TerrainHeight, 0.0, fOccupancy * 4.0);
+    float fScale = 1.0f + hash_int_to_float(corner0 + gridPosition);
+    perInst.position = float4(random_X, height, random_Z, fScale);
 
-    //uint rotationY = random.NextFloat(-180f, 180f);
-    perInst.rotationXY = 0.0f;//PackTwoBytesIntoHalf(0, 0);
+    float3 normalWS = CalculateNormalFromHeightmap(UV_coords, TerrainHeight, fOccupancy);
+    perInst.quatRotation = CreateGrassRotationQuaternion(normalWS, hash_int_to_float(corner0 + gridPosition) * 2.0f);
     instances[id.x] = perInst;
 }
