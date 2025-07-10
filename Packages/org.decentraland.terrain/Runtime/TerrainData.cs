@@ -297,8 +297,8 @@ namespace Decentraland.Terrain
         internal RectInt PositionToParcelRect(float2 centerXZ, float radius)
         {
             float invParcelSize = 1f / parcelSize;
-            int2 min = (int2)((centerXZ - radius) * invParcelSize);
-            int2 size = (int2)((centerXZ + radius) * invParcelSize) - min + 1;
+            int2 min = (int2)floor((centerXZ - radius) * invParcelSize);
+            int2 size = (int2)ceil((centerXZ + radius) * invParcelSize) - min;
             return new RectInt(min.x, min.y, size.x, size.y);
         }
 
