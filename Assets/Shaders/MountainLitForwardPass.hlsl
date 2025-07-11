@@ -235,6 +235,8 @@ Varyings LitPassVertexSimple(Attributes input)
     return output;
 }
 
+SamplerState OccupancyPointClampSampler;
+
 // Used for StandardSimpleLighting shader
 void LitPassFragmentSimple(
     Varyings input
@@ -298,7 +300,7 @@ void LitPassFragmentSimple(
     color.rgb = MixFog(color.rgb, inputData.fogCoord);
     color.a = OutputAlpha(color.a, IsSurfaceTypeTransparent(_Surface));
 
-    outColor = lerp(color, float4(1,0,0,1), input.occupancy * 1.25f );
+    outColor = lerp(color, float4(1,0,0,1), SAMPLE_TEXTURE2D(_OccupancyMap, OccupancyPointClampSampler, (input.positionWS.xz + 4096.0) / 8192.0));
 
 #ifdef _WRITE_RENDERING_LAYERS
     uint renderingLayers = GetMeshRenderingLayer();

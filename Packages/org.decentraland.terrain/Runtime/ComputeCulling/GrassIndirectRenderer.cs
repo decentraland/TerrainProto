@@ -170,7 +170,10 @@ namespace Decentraland.Terrain
 
             QuadTreeCullingShader.SetMatrix("viewProjMatrix", viewProjMatrix);
             QuadTreeCullingShader.SetVector("TerrainBounds", terrainBounds);
-            QuadTreeCullingShader.SetTexture(kernelIndex, "OccupancyTexture", terrainData.OccupancyMap);
+
+            QuadTreeCullingShader.SetTexture(kernelIndex, "OccupancyTexture",
+                terrainData.OccupancyMap != null ? terrainData.OccupancyMap : Texture2D.blackTexture);
+
             QuadTreeCullingShader.SetBuffer(kernelIndex, "quadTreeNodes", quadTreeNodesComputeBuffer);
             QuadTreeCullingShader.SetBuffer(kernelIndex, "visibleParcels", visibleParcelsComputeBuffer);
             QuadTreeCullingShader.SetBuffer(kernelIndex, "visibleParcelCount", visibleparcelCountComputeBuffer);
@@ -202,7 +205,10 @@ namespace Decentraland.Terrain
             ScatterGrassShader.SetVector("TerrainBounds", terrainBounds);
             ScatterGrassShader.SetFloat("TerrainHeight", 4.0f);
             ScatterGrassShader.SetTexture(kernelIndex, "HeightMapTexture", HeightMapTexture);
-            ScatterGrassShader.SetTexture(kernelIndex, "OccupancyTexture", terrainData.OccupancyMap);
+
+            ScatterGrassShader.SetTexture(kernelIndex, "OccupancyTexture",
+                terrainData.OccupancyMap != null ? terrainData.OccupancyMap : Texture2D.blackTexture);
+
             ScatterGrassShader.SetBuffer(kernelIndex, "visibleParcels", visibleParcelsComputeBuffer);
             ScatterGrassShader.SetBuffer(kernelIndex, "visibleParcelCount", visibleparcelCountComputeBuffer);
             ScatterGrassShader.SetBuffer(kernelIndex, "instances", grassInstancesComputeBuffer);
