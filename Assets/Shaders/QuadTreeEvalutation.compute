@@ -25,13 +25,9 @@ SamplerState OccupancyPointClampSampler : register(s0);
 RWStructuredBuffer<int2> visibleParcels : register(u0);
 RWStructuredBuffer<uint> visibleParcelCount : register(u1);
 
-inline float GetOccupancy(float3 PositionIn, float4 TerrainBounds, int ParcelSize)
+inline float GetOccupancy(float2 UV_Coord, float4 TerrainBounds, int ParcelSize)
 {
-    // The occupancy map has a 1 pixel border around the terrain.
-    float2 scale = float2(  1.0f / (TerrainBounds.y - TerrainBounds.x + ParcelSize * 2.0f),
-                            1.0f / (TerrainBounds.w - TerrainBounds.z + ParcelSize * 2.0f));
-
-    return OccupancyTexture.SampleLevel(OccupancyPointClampSampler, (PositionIn.xz - TerrainBounds.xz + ParcelSize) * scale, 0.0).r;
+    return OccupancyTexture.SampleLevel(OccupancyPointClampSampler, UV_Coord, 0.0).r;
 }
 
 [numthreads(256, 1, 1)]
@@ -49,8 +45,9 @@ void HierarchicalQuadTreeCulling(uint3 id : SV_DispatchThreadID, uint3 groupId :
 
     if (IsFrustumCulled(BoundingBox) == false)
     {
-        float fOccupancy = GetOccupancy(float3(plot.x * 16, 0, plot.y * 16), TerrainBounds, 16);
-        if(fOccupancy < 0.5f || true)
+        float2 UV_Coords = (float2(plot.x * 16, plot.y * 16) + 4096) / 8192;
+        float fOccupancy = GetOccupancy(UV_Coords, TerrainBounds, 16);
+        if (fOccupancy < 0.5f)
         {
             uint outputIndex;
             InterlockedAdd(visibleParcelCount[0], 1, outputIndex);

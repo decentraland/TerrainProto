@@ -88,7 +88,7 @@ namespace Decentraland.Terrain
 #endif
             );
 
-            if (grassIndirectRenderer != null && false)
+            if (grassIndirectRenderer != null)
             {
                 grassIndirectRenderer.RunFrustumCulling();
                 grassIndirectRenderer.GenerateScatteredGrass();

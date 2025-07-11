@@ -12,7 +12,8 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 
     input.positionWS = ClampPosition(input.positionWS, terrainBounds);
 
     const int ParcelSize = 16;
-    fOccupancy = GetOccupancy(input.positionWS.xyz, terrainBounds, ParcelSize);
+    float2 heightUV = (input.positionWS.xz + 4096.0f) / 8192.0f;
+    fOccupancy = GetOccupancy(heightUV, terrainBounds, ParcelSize);
 
     if (_UseHeightMap > 0)
     {

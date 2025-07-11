@@ -137,13 +137,9 @@ inline void InitializeSimpleLitSurfaceData(float2 uv, out SurfaceData outSurface
     outSurfaceData.emission = SampleEmission(uv, _EmissionColor.rgb, TEXTURE2D_ARGS(_EmissionMap, sampler_EmissionMap));
 }
 
-float GetOccupancy(float3 PositionIn, float4 TerrainBounds, int ParcelSize)
+float GetOccupancy(float2 UV_Coords, float4 TerrainBounds, int ParcelSize)
 {
-    // The occupancy map has a 1 pixel border around the terrain.
-    float2 scale = float2(  1.0f / (TerrainBounds.y - TerrainBounds.x + ParcelSize * 2.0f),
-                            1.0f / (TerrainBounds.w - TerrainBounds.z + ParcelSize * 2.0f));
-
-    return SAMPLE_TEXTURE2D_LOD(_OccupancyMap, sampler_OccupancyMap, (PositionIn.xz - TerrainBounds.xz + ParcelSize) * scale, 0.0).r;
+    return SAMPLE_TEXTURE2D_LOD(_OccupancyMap, sampler_OccupancyMap, UV_Coords, 0.0).r;
 }
 
 #endif
