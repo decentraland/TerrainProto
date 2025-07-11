@@ -7,7 +7,6 @@ using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
 using static Unity.Mathematics.math;
-using Random = Unity.Mathematics.Random;
 
 namespace Decentraland.Terrain
 {
@@ -193,6 +192,23 @@ namespace Decentraland.Terrain
             state.dirtyParcels.Clear();
         }
 
+        private void OnDrawGizmos()
+        {
+            if (state == null)
+                return;
+
+            Gizmos.color = Color.magenta;
+
+            for (int i = 0; i < state.usedParcels.Count; i++)
+            {
+                ParcelData parcelData = state.usedParcels[i];
+
+                if (parcelData.treePrototypeIndex >= 0)
+                    Gizmos.DrawWireSphere(parcelData.treeInstance.transform.position,
+                        state.terrainData.TreePrototypes[parcelData.treePrototypeIndex].CanopyRadius);
+            }
+        }
+
         private static bool ContainsParcel(List<ParcelData> parcels, int2 parcel)
         {
             for (int i = 0; i < parcels.Count; i++)
@@ -256,6 +272,9 @@ namespace Decentraland.Terrain
         private static void GenerateTree(int2 parcel, in TerrainDataData terrainData,
             ParcelData parcelData, TerrainColliderState state)
         {
+            if (terrainData.IsOccupied(parcel))
+                return;
+
             if (!terrainData.NextTree(parcel, out _, out float3 position, out float rotationY,
                     out int prototypeIndex))
             {

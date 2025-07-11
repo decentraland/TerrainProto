@@ -29,5 +29,8 @@ namespace Decentraland.Terrain
 
         public static Vector2Int ToVector2Int(this int2 value) =>
             new Vector2Int(value.x, value.y);
+
+        public static Vector2 XZ(this Vector3 value) =>
+            new Vector2(value.x, value.z);
     }
 }

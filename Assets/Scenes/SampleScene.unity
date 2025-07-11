@@ -130,7 +130,6 @@ GameObject:
   - component: {fileID: 248761157}
   - component: {fileID: 248761156}
   - component: {fileID: 248761158}
-  - component: {fileID: 248761159}
   m_Layer: 0
   m_Name: Terrain
   m_TagString: Untagged
@@ -151,7 +150,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   <TerrainData>k__BackingField: {fileID: 11400000, guid: 474c5b9c51960c240a777b6326c73941, type: 2}
-  <grassIndirectRenderer>k__BackingField: {fileID: 248761159}
+  <GrassIndirectRenderer>k__BackingField: {fileID: 11400000, guid: a90e2760be5889042a8cbd9419f88649, type: 2}
 --- !u!4 &248761157
 Transform:
   m_ObjectHideFlags: 0
@@ -180,23 +179,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   <TerrainData>k__BackingField: {fileID: 11400000, guid: 474c5b9c51960c240a777b6326c73941, type: 2}
---- !u!114 &248761159
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 248761153}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 07879479ffaf4ff4b77cd64f47113fb6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  quadTreeCullingShader: {fileID: 7200000, guid: 1ffe6570cfbb43f78f6b2beb126b69bc, type: 3}
-  ScatterGrassShader: {fileID: 7200000, guid: a08d70e37ff645da89433c194594339a, type: 3}
-  HeightMapTexture: {fileID: 2800000, guid: b15e509b80445d94b92a2d38a4c493a6, type: 3}
-  OccupancyMap: {fileID: 2800000, guid: 3fb0d1129424bdb40a89f785c5ec75a8, type: 3}
-  TerrainBounds: {x: -2400, y: 2624, z: -2400, w: 2544}
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -210,6 +192,7 @@ GameObject:
   - component: {fileID: 330585547}
   - component: {fileID: 330585548}
   - component: {fileID: 330585549}
+  - component: {fileID: 330585550}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -277,7 +260,7 @@ Transform:
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -703.5, y: 5.75, z: -172}
+  m_LocalPosition: {x: 0, y: 10, z: 200}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -353,6 +336,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3413dd68420e4b7eb0d3fd6a9abb892e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &330585550
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330585543}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d78021f860e4237a33dcb2c833f0cb6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  <TerrainData>k__BackingField: {fileID: 11400000, guid: 474c5b9c51960c240a777b6326c73941, type: 2}
 --- !u!1 &410087039
 GameObject:
   m_ObjectHideFlags: 0
@@ -624,13 +620,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1044867122}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.00039859375, y: -0.0042621614, z: 0.17238829, w: 0.9850198}
-  m_LocalPosition: {x: -708.559, y: 3.198, z: -162.04}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.5, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0.039, y: -0.489, z: 19.853}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

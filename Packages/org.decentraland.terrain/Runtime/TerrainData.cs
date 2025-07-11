@@ -249,22 +249,28 @@ namespace Decentraland.Terrain
             float2 positionXZ = random.NextFloat2(parcelSize);
             prototypeIndex = random.NextInt(treePrototypes.Length);
 
-            /*float canopyRadius = treePrototypes[prototypeIndex].canopyRadius;
+            float canopyRadius = treePrototypes[prototypeIndex].canopyRadius;
 
             if (positionXZ.x < canopyRadius)
             {
                 if (IsOccupied(int2(parcel.x - 1, parcel.y)))
                     return false;
 
-                if (OverlapsNeighbor(int2(parcel.x - 1, parcel.y), positionXZ, canopyRadius))
-                    return false;
-
                 if (positionXZ.y < canopyRadius)
                 {
                     if (IsOccupied(int2(parcel.x - 1, parcel.y - 1)))
                         return false;
+                }
+            }
 
-                    if (OverlapsNeighbor(int2(parcel.x - 1, parcel.y - 1), positionXZ, canopyRadius))
+            if (parcelSize - positionXZ.x < canopyRadius)
+            {
+                if (IsOccupied(int2(parcel.x + 1, parcel.y)))
+                    return false;
+
+                if (parcelSize - positionXZ.y < canopyRadius)
+                {
+                    if (IsOccupied(int2(parcel.x + 1, parcel.y + 1)))
                         return false;
                 }
             }
@@ -274,18 +280,36 @@ namespace Decentraland.Terrain
                 if (IsOccupied(int2(parcel.x, parcel.y - 1)))
                     return false;
 
-                if (OverlapsNeighbor(int2(parcel.x, parcel.y - 1), positionXZ, canopyRadius))
-                    return false;
-
                 if (parcelSize - positionXZ.x < canopyRadius)
                 {
                     if (IsOccupied(int2(parcel.x + 1, parcel.y - 1)))
                         return false;
+                }
+            }
 
-                    if (OverlapsNeighbor(int2(parcel.x + 1, parcel.y - 1), positionXZ, canopyRadius))
+            if (parcelSize - positionXZ.y < canopyRadius)
+            {
+                if (IsOccupied(int2(parcel.x, parcel.y + 1)))
+                    return false;
+
+                if (positionXZ.x < canopyRadius)
+                {
+                    if (IsOccupied(int2(parcel.x - 1, parcel.y + 1)))
                         return false;
                 }
-            }*/
+            }
+
+            if (OverlapsNeighbor(int2(parcel.x - 1, parcel.y), positionXZ, canopyRadius))
+                return false;
+
+            if (OverlapsNeighbor(int2(parcel.x - 1, parcel.y - 1), positionXZ, canopyRadius))
+                return false;
+
+            if (OverlapsNeighbor(int2(parcel.x, parcel.y - 1), positionXZ, canopyRadius))
+                return false;
+
+            if (OverlapsNeighbor(int2(parcel.x + 1, parcel.y - 1), positionXZ, canopyRadius))
+                return false;
 
             position.xz = positionXZ + parcel * parcelSize;
             position.y = GetHeight(position.x, position.z);

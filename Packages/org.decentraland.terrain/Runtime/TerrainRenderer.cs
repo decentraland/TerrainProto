@@ -14,11 +14,10 @@ using Random = Unity.Mathematics.Random;
 namespace Decentraland.Terrain
 {
     [ExecuteAlways]
-    [RequireComponent(typeof(GrassIndirectRenderer))]
     public sealed class TerrainRenderer : MonoBehaviour
     {
         [field: SerializeField] private TerrainData TerrainData { get; set; }
-        [field: SerializeField] private GrassIndirectRenderer grassIndirectRenderer { get; set; }
+        [field: SerializeField] private GrassIndirectRenderer GrassIndirectRenderer { get; set; }
 
         private static readonly Vector3[] CLIP_CORNERS =
         {
@@ -37,17 +36,6 @@ namespace Decentraland.Terrain
         internal int GroundInstanceCount { get; private set; }
         internal int TreeInstanceCount { get; private set; }
 #endif
-
-        public void Awake()
-        {
-            grassIndirectRenderer = GetComponent<GrassIndirectRenderer>();
-        }
-
-        public void Start()
-        {
-            grassIndirectRenderer.GenerateQuadTree();
-            grassIndirectRenderer.SetupComputeBuffers();
-        }
 
         private void Update()
         {
@@ -80,22 +68,18 @@ namespace Decentraland.Terrain
             if (camera == null)
                 return;
 
-            Render(TerrainData, camera,
 #if UNITY_EDITOR
-                true, this
+            bool renderToAllCameras = true;
 #else
-                false
+            bool renderToAllCameras = false;
 #endif
-            );
 
-            if (grassIndirectRenderer != null)
-            {
-                grassIndirectRenderer.RunFrustumCulling();
-                grassIndirectRenderer.GenerateScatteredGrass();
-                DetailPrototype prototype = TerrainData.DetailPrototypes[0];
-                grassIndirectRenderer.SetMeshAndMaterial(prototype.Mesh, prototype.Material);
-                grassIndirectRenderer.RenderGrass();
-            }
+            bool renderGrassIndirect = GrassIndirectRenderer != null;
+
+            if (TerrainData.RenderTreesAndDetail && renderGrassIndirect)
+                GrassIndirectRenderer.Render(TerrainData, camera, renderToAllCameras);
+
+            Render(TerrainData, camera, renderToAllCameras, renderGrassIndirect);
         }
 
         private void OnDrawGizmosSelected()
@@ -168,7 +152,8 @@ namespace Decentraland.Terrain
             return true;
         }
 
-        public static void Render(TerrainData terrainData, Camera camera, bool renderToAllCameras
+        public static void Render(TerrainData terrainData, Camera camera, bool renderToAllCameras,
+            bool renderGrassIndirect = false
 #if UNITY_EDITOR
             , TerrainRenderer renderer = null
 #endif
@@ -355,6 +340,7 @@ namespace Decentraland.Terrain
                     treePrototypes = treePrototypes,
                     treeLods = treeLods,
                     detailPrototypes = detailPrototypes,
+                    renderGrassIndirect = renderGrassIndirect,
                     treeInstances = treeInstances.AsParallelWriter(),
                     detailInstances = detailInstances.AsParallelWriter()
                 };
@@ -803,6 +789,7 @@ namespace Decentraland.Terrain
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreePrototypeData> treePrototypes;
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreeLODData> treeLods;
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<DetailPrototypeData> detailPrototypes;
+            public bool renderGrassIndirect;
             public NativeList<TreeInstance>.ParallelWriter treeInstances;
             public NativeList<DetailInstance>.ParallelWriter detailInstances;
 
@@ -846,29 +833,32 @@ namespace Decentraland.Terrain
 
                 // Detail scattering
 
+                if (renderGrassIndirect)
+                    return;
+
                 float3 parcelCenter;
                 parcelCenter.x = (parcel.x + 0.5f) * terrainData.parcelSize;
                 parcelCenter.z = (parcel.y + 0.5f) * terrainData.parcelSize;
                 parcelCenter.y = terrainData.GetHeight(parcelCenter.x, parcelCenter.z);
 
-                if (distancesq(parcelCenter, cameraPosition) < detailSqrDistance)
+                if (distancesq(parcelCenter, cameraPosition) > detailSqrDistance)
+                    return;
+
+                for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
                 {
-                    for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
+                    DetailPrototypeData prototype = detailPrototypes[prototypeIndex];
+
+                    switch (prototype.scatterMode)
                     {
-                        DetailPrototypeData prototype = detailPrototypes[prototypeIndex];
+                        case DetailScatterMode.JitteredGrid:
+                            if (!JitteredGrid(parcel, prototypeIndex, ref random, detailInstances))
+                                goto outOfSpace;
 
-                        switch (prototype.scatterMode)
-                        {
-                            case DetailScatterMode.JitteredGrid:
-                                if (!JitteredGrid(parcel, prototypeIndex, ref random, detailInstances))
-                                    goto outOfSpace;
-
-                                break;
-                        }
+                            break;
                     }
-
-                    outOfSpace: ;
                 }
+
+                outOfSpace: ;
             }
 
             private bool JitteredGrid(int2 parcel, int meshIndex,
