@@ -12,6 +12,7 @@ namespace Decentraland.Terrain
         [field: SerializeField] private ComputeShader QuadTreeCullingShader { get; set; }
         [field: SerializeField] private ComputeShader ScatterGrassShader { get; set; }
         [field: SerializeField] private Texture2D HeightMapTexture { get; set; }
+        [field: SerializeField] private Texture2D TerrainBlendTexture { get; set; }
 
         public struct QuadTreeNodeData
         {
