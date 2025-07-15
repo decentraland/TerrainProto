@@ -149,7 +149,10 @@ namespace Decentraland.Terrain
 
         public void RunFrustumCulling(TerrainData terrainData, Camera camera)
         {
-            if (QuadTreeCullingShader == null || quadTreeNodesComputeBuffer == null)
+            if (QuadTreeCullingShader == null ||
+                quadTreeNodesComputeBuffer == null ||
+                visibleParcelsComputeBuffer == null ||
+                visibleparcelCountComputeBuffer == null)
                 return;
 
             // Reset visible count
@@ -183,7 +186,8 @@ namespace Decentraland.Terrain
 
             // Read back results
             visibleparcelCountComputeBuffer.GetData(visibleCount);
-            args[1] = (uint)(visibleCount[0] * 256); // instanceCount
+            visibleCount[0] = Mathf.Min(visibleCount[0] * 256, 256 * 256);
+            args[1] = (uint)(visibleCount[0]); // instanceCount
             drawArgs.SetData(args);
         }
 
@@ -193,7 +197,8 @@ namespace Decentraland.Terrain
                 HeightMapTexture == null ||
                 visibleParcelsComputeBuffer == null ||
                 visibleparcelCountComputeBuffer == null ||
-                grassInstancesComputeBuffer == null)
+                grassInstancesComputeBuffer == null ||
+                TerrainBlendTexture == null)
                 return;
 
             // Set up compute shader
@@ -224,7 +229,7 @@ namespace Decentraland.Terrain
 
         public void RenderGrass(Camera camera)
         {
-            if (drawArgs == null)
+            if (drawArgs == null || visibleParcelsComputeBuffer == null || grassInstancesComputeBuffer == null)
                 return;
 
             var renderParams = new RenderParams()
@@ -256,6 +261,8 @@ namespace Decentraland.Terrain
             quadTreeNodesComputeBuffer?.Release();
             visibleParcelsComputeBuffer?.Release();
             visibleparcelCountComputeBuffer?.Release();
+            grassInstancesComputeBuffer?.Release();
+            drawArgs?.Release();
         }
     }
 }
