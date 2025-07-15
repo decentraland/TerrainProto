@@ -6,6 +6,7 @@ struct PerInst
 {
     float4 position;
     float4 quatRotation;
+    float4 colour;
 };
 
 cbuffer ConstBuffer : register(b0)
@@ -17,13 +18,16 @@ cbuffer ConstBuffer : register(b0)
 
 Texture2D<float4> HeightMapTexture : register(t0);
 Texture2D<float4> OccupancyTexture : register(t1);
+Texture2D<float4> TerrainBlendTexture : register(t2);
+StructuredBuffer<int2> visibleParcels : register(t3);
+StructuredBuffer<uint> visibleParcelCount : register(t4);
 
 SamplerState samplerHeightMapTexture : register(s0);
 SamplerState samplerOccupancyTexture : register(s1);
 SamplerState HeightMapTexturePointClampSampler : register(s2);
+SamplerState samplerTerrainBlendTexture : register(s3);
+SamplerState TerrainBlendPointRepeatSampler : register(s4);
 
-StructuredBuffer<int2> visibleParcels : register(t2);
-StructuredBuffer<uint> visibleParcelCount : register(t3);
 
 RWStructuredBuffer<PerInst> instances : register(u0);
 
@@ -152,6 +156,11 @@ inline float GetOccupancy(float2 UV_Coord, float4 TerrainBounds, int ParcelSize)
     return OccupancyTexture.SampleLevel(samplerOccupancyTexture, UV_Coord, 0.0).r;
 }
 
+inline float4 SampleColour(float2 uv)
+{
+    return float4(TerrainBlendTexture.SampleLevel(samplerTerrainBlendTexture, uv, 0.0).rgb, 1.0f);
+}
+
 [numthreads(256, 1, 1)]
 void ScatterGrass(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint3 localId : SV_GroupThreadID)
 {
@@ -175,5 +184,6 @@ void ScatterGrass(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, ui
 
     float3 normalWS = CalculateNormalFromHeightmap(UV_coords, TerrainHeight, fOccupancy);
     perInst.quatRotation = CreateGrassRotationQuaternion(normalWS, hash_int_to_float(corner0 + gridPosition) * 2.0f);
+    perInst.colour = SampleColour(UV_coords);
     instances[id.x] = perInst;
 }

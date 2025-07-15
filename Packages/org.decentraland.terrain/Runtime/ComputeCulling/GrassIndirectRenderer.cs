@@ -23,9 +23,10 @@ namespace Decentraland.Terrain
         {
             public float4 position;
             public float4 quatRotation;
+            public float4 colour;
         }
 
-        private int renderTextureSize = 512;
+        //private int renderTextureSize = 512;
         private int maxDepth = 10;
         [NonSerialized] private bool initialized;
         private QuadTreeNodeData[] quadTreeNodes = new QuadTreeNodeData[349525];
@@ -211,6 +212,7 @@ namespace Decentraland.Terrain
             ScatterGrassShader.SetVector("TerrainBounds", terrainBounds);
             ScatterGrassShader.SetFloat("TerrainHeight", 4.0f);
             ScatterGrassShader.SetTexture(kernelIndex, "HeightMapTexture", HeightMapTexture);
+            ScatterGrassShader.SetTexture(kernelIndex, "TerrainBlendTexture", TerrainBlendTexture);
 
             ScatterGrassShader.SetTexture(kernelIndex, "OccupancyTexture",
                 terrainData.OccupancyMap != null ? terrainData.OccupancyMap : Texture2D.blackTexture);
