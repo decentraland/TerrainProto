@@ -13,7 +13,8 @@ namespace Decentraland.Terrain
         [field: SerializeField] private ComputeShader ScatterGrassShader { get; set; }
         [field: SerializeField] private Texture2D HeightMapTexture { get; set; }
         [field: SerializeField] private Texture2D TerrainBlendTexture { get; set; }
-
+        [field: SerializeField] private Texture2D GroundDetailTexture { get; set; }
+        [field: SerializeField] private Texture2D SandDetailTexture { get; set; }
         public struct QuadTreeNodeData
         {
             public uint Depth8CornerIndexStart24;
@@ -213,6 +214,8 @@ namespace Decentraland.Terrain
             ScatterGrassShader.SetFloat("TerrainHeight", 4.0f);
             ScatterGrassShader.SetTexture(kernelIndex, "HeightMapTexture", HeightMapTexture);
             ScatterGrassShader.SetTexture(kernelIndex, "TerrainBlendTexture", TerrainBlendTexture);
+            ScatterGrassShader.SetTexture(kernelIndex, "GroundDetailTexture", GroundDetailTexture);
+            ScatterGrassShader.SetTexture(kernelIndex, "SandDetailTexture", SandDetailTexture);
 
             ScatterGrassShader.SetTexture(kernelIndex, "OccupancyTexture",
                 terrainData.OccupancyMap != null ? terrainData.OccupancyMap : Texture2D.blackTexture);

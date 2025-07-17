@@ -258,11 +258,12 @@ void LitPassFragmentSimple(
 
     InitializeBakedGIData(input, inputData);
 
+    surfaceData.albedo = SplatmapMix(input.uv).xyz;
     half4 color = UniversalFragmentBlinnPhong(inputData, surfaceData);
     color.rgb = MixFog(color.rgb, inputData.fogCoord);
     color.a = OutputAlpha(color.a, IsSurfaceTypeTransparent(_Surface));
 
-    outColor = BlendTexturesByColorAdvanced(input.uv, _RedThreshold, _YellowThreshold, _BlendSmoothness);
+    outColor = color;
 #ifdef _WRITE_RENDERING_LAYERS
     uint renderingLayers = GetMeshRenderingLayer();
     outRenderingLayers = float4(EncodeMeshRenderingLayer(renderingLayers), 0, 0, 0);

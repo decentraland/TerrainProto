@@ -29,6 +29,10 @@ Shader "DCL/MountainLit"
         _TerrainMaskMap("Blend Map", 2D) = "white" {}
         _GroundDetailMap("Ground Detail Map", 2D) = "white" {}
         _SandDetailMap("Sand Detail Map", 2D) = "white" {}
+        [HideInInspector] _GroundNormalScale("Ground Normal Scale", Float) = 1.0
+        [NoScaleOffset] _GroundNormalMap("Ground Normal Map", 2D) = "bump" {}
+        [HideInInspector] _SandNormalScale("Sand Normal Scale", Float) = 1.0
+        [NoScaleOffset] _SandNormalMap("Sand Normal Map", 2D) = "bump" {}
         _RedThreshold("Red Threshold", Float) = 1.0
         _YellowThreshold("Yellow Threshold", Float) = 1.0
         _BlendSmoothness("Blend Smoothness", Float) = 1.0
