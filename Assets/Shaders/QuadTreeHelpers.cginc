@@ -319,6 +319,12 @@ inline void CalculateBoundingBox(in float4x4 objectTransformMatrix, float4x4 mat
     BoundingBox[7] = mul(to_clip_space_mat, float4(Min.x, Min.y, Min.z, 1.0));
 }
 
+inline bool IsWithinTerrainBounds(int2 plot, float4 terrainBounds)
+{
+    int2 worldCoord = plot;// * 16.0f;
+    return worldCoord.x > terrainBounds.x && worldCoord.x < terrainBounds.y && worldCoord.y > terrainBounds.z && worldCoord.y < terrainBounds.w;
+}
+
 inline bool IsFrustumCulled(float4 BoundingBox[8])
 {
     bool isCulled = false;
