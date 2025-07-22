@@ -805,10 +805,17 @@ namespace Decentraland.Terrain
 
                 // Tree scattering
 
-                if (terrainData.NextTree(parcel, out Random random, out float3 position,
-                        out float rotationY, out int prototypeIndex0))
+                Random random = terrainData.GetRandom(parcel);
+                ReadOnlySpan<byte2> treePositions = terrainData.GetTreePositions(parcel);
+
+                for (int i = 0; i < treePositions.Length; i++)
                 {
-                    int prototypeIndex = prototypeIndex0;
+                    if (!terrainData.TryGenerateTree(parcel, treePositions[i], ref random,
+                            out int prototypeIndex, out float3 position, out float rotationY))
+                    {
+                        continue;
+                    }
+
                     TreePrototypeData prototype = treePrototypes[prototypeIndex];
                     float screenSize = prototype.localSize / distance(position, cameraPosition);
                     int meshIndex = prototype.lod0MeshIndex;

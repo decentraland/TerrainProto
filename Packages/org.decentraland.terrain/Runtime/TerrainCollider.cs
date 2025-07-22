@@ -7,6 +7,7 @@ using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
 using static Unity.Mathematics.math;
+using Random = Unity.Mathematics.Random;
 
 namespace Decentraland.Terrain
 {
@@ -104,16 +105,14 @@ namespace Decentraland.Terrain
                                 parcel.x * terrainData.parcelSize, 0f,
                                 parcel.y * terrainData.parcelSize);
 
-                            if (parcelData.treePrototypeIndex >= 0)
+                            for (int j = 0; j < parcelData.trees.Count; j++)
                             {
-                                state.treePools[parcelData.treePrototypeIndex]
-                                    .Release(parcelData.treeInstance);
-
-                                parcelData.treeInstance = null;
-                                parcelData.treePrototypeIndex = -1;
+                                TreeInstance tree = parcelData.trees[j];
+                                state.treePools[tree.prototypeIndex].Release(tree.gameObject);
                             }
 
-                            GenerateTree(parcel, in terrainData, parcelData, state);
+                            parcelData.trees.Clear();
+                            GenerateTrees(parcel, in terrainData, parcelData, state);
                         }
                     }
                     else
@@ -134,7 +133,7 @@ namespace Decentraland.Terrain
 
                         transform.SetParent(state.parent, true);
 
-                        GenerateTree(parcel, in terrainData, parcelData, state);
+                        GenerateTrees(parcel, in terrainData, parcelData, state);
                     }
                 }
             }
@@ -203,9 +202,13 @@ namespace Decentraland.Terrain
             {
                 ParcelData parcelData = state.usedParcels[i];
 
-                if (parcelData.treePrototypeIndex >= 0)
-                    Gizmos.DrawWireSphere(parcelData.treeInstance.transform.position,
-                        state.terrainData.TreePrototypes[parcelData.treePrototypeIndex].CanopyRadius);
+                for (int j = 0; j < parcelData.trees.Count; j++)
+                {
+                    TreeInstance tree = parcelData.trees[j];
+
+                    Gizmos.DrawWireSphere(tree.gameObject.transform.position,
+                        state.terrainData.TreePrototypes[tree.prototypeIndex].CanopyRadius);
+                }
             }
         }
 
@@ -269,23 +272,34 @@ namespace Decentraland.Terrain
             return mesh;
         }
 
-        private static void GenerateTree(int2 parcel, in TerrainDataData terrainData,
+        private static void GenerateTrees(int2 parcel, in TerrainDataData terrainData,
             ParcelData parcelData, TerrainColliderState state)
         {
             if (terrainData.IsOccupied(parcel))
                 return;
 
-            if (!terrainData.NextTree(parcel, out _, out float3 position, out float rotationY,
-                    out int prototypeIndex))
+            Random random = terrainData.GetRandom(parcel);
+            ReadOnlySpan<byte2> treePositions = terrainData.GetTreePositions(parcel);
+
+            for (int i = 0; i < treePositions.Length; i++)
             {
-                return;
+                if (!terrainData.TryGenerateTree(parcel, treePositions[i], ref random,
+                        out int prototypeIndex, out float3 position, out float rotationY))
+                {
+                    continue;
+                }
+
+                var tree = new TreeInstance()
+                {
+                    prototypeIndex = prototypeIndex,
+                    gameObject = state.treePools[prototypeIndex].Get()
+                };
+
+                tree.gameObject.transform.SetPositionAndRotation(position,
+                    Quaternion.Euler(0f, rotationY, 0f));
+
+                parcelData.trees.Add(tree);
             }
-
-            parcelData.treeInstance = state.treePools[prototypeIndex].Get();
-            parcelData.treePrototypeIndex = prototypeIndex;
-
-            parcelData.treeInstance.transform.SetPositionAndRotation(position,
-                Quaternion.Euler(0f, rotationY, 0f));
         }
 
         [BurstCompile]
@@ -353,8 +367,14 @@ namespace Decentraland.Terrain
             public int2 parcel;
             public MeshCollider collider;
             public Mesh mesh;
-            public int treePrototypeIndex = -1;
-            public GameObject treeInstance;
+            public List<TreeInstance> trees = new();
+        }
+
+        [Serializable]
+        internal struct TreeInstance
+        {
+            public int prototypeIndex;
+            public GameObject gameObject;
         }
     }
 
