@@ -53,20 +53,30 @@ namespace Decentraland.Terrain
         /// <remarks>Awaiting this method is optional.</remarks>
         public async Awaitable GenerateTreePositions()
         {
+            oldBounds = Bounds;
+            oldTreeSpacing = TreeSpacing;
+
+            if (treeIndices.IsCreated)
+                treeIndices.Dispose();
+
+            if (treePositions.IsCreated)
+                treePositions.Dispose();
+
+            if (Bounds.width * Bounds.height <= 0)
+            {
+                treeIndices = new NativeArray<int>(0, Allocator.Persistent);
+                treePositions = new NativeList<byte2>(0, Allocator.Persistent);
+                return;
+            }
+
             var blueNoiseJob = new BlueNoise2D((Bounds.size * ParcelSize).ToFloat2(),
                 TreeSpacing * 0.5f, (Bounds.position * -ParcelSize).ToFloat2(), new Random(RandomSeed));
 
             JobHandle blueNoise = blueNoiseJob.Schedule();
             this.generateTreePositions.Complete();
 
-            if (treeIndices.IsCreated)
-                treeIndices.Dispose();
-
             treeIndices = new NativeArray<int>(Bounds.width * Bounds.height, Allocator.Persistent,
                 NativeArrayOptions.UninitializedMemory);
-
-            if (treePositions.IsCreated)
-                treePositions.Dispose();
 
             treePositions = new NativeList<byte2>(Allocator.Persistent);
 
@@ -87,12 +97,11 @@ namespace Decentraland.Terrain
             this.generateTreePositions = generateTreePositions;
 
             JobHandle.ScheduleBatchedJobs();
-            oldBounds = Bounds;
-            oldTreeSpacing = TreeSpacing;
 
             while (!generateTreePositions.IsCompleted)
                 await Awaitable.NextFrameAsync();
 
+            generateTreePositions.Complete();
             blueNoiseJob.Dispose();
         }
 
