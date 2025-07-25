@@ -154,11 +154,7 @@ namespace Decentraland.Terrain
         }
 
         public static void Render(TerrainData terrainData, Camera camera, bool renderToAllCameras,
-            bool renderGrassIndirect = false
-#if UNITY_EDITOR
-            , TerrainRenderer renderer = null
-#endif
-        )
+            bool renderGrassIndirect = false, TerrainRenderer renderer = null)
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (terrainData == null)
