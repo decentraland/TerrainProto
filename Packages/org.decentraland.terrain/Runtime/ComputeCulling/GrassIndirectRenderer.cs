@@ -256,6 +256,7 @@ namespace Decentraland.Terrain
             renderParams.matProps.SetBuffer("_PerParcelBuffer", visibleParcelsComputeBuffer);
             renderParams.matProps.SetBuffer("_PerInstanceBuffer", grassInstancesComputeBuffer);
             renderParams.shadowCastingMode = ShadowCastingMode.Off;
+            Shader.SetGlobalVector("_ColorMapParams", new Vector4(2.0f, 0.0f, 0.0f, 0.0f));
 
             Graphics.RenderMeshIndirect(renderParams, grassMesh, drawArgs);
         }
