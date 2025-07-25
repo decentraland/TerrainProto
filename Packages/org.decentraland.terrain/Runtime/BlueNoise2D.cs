@@ -92,7 +92,7 @@ namespace Decentraland.Terrain
         {
             int2 min = (int2)floor((point - radius) / space * gridSize);
             int2 max = (int2)ceil((point + radius) / space * gridSize);
-            float sqrRadius = radius * radius;
+            float minSqrDistance = radius * radius * 4f;
 
             for (int y = min.y; y < max.y; y++)
             for (int x = min.x; x < max.x; x++)
@@ -100,7 +100,7 @@ namespace Decentraland.Terrain
                 int2 cell = wrap(int2(x, y), gridSize);
                 int index = grid[cell.y * gridSize.x + cell.x];
 
-                if (index >= 0 && distancesq(point, points[index]) < sqrRadius)
+                if (index >= 0 && distancesq(point, points[index]) < minSqrDistance)
                     return false;
             }
 

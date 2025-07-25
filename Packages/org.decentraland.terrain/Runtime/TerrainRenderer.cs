@@ -32,7 +32,8 @@ namespace Decentraland.Terrain
         private static readonly int TERRAIN_BOUNDS_ID = Shader.PropertyToID("_TerrainBounds");
 
 #if UNITY_EDITOR
-        internal int DetailInstanceCount { get; private set; }
+        internal int ClutterInstanceCount { get; private set; }
+        internal int GrassInstanceCount { get; private set; }
         internal int GroundInstanceCount { get; private set; }
         internal int TreeInstanceCount { get; private set; }
 #endif
@@ -79,7 +80,7 @@ namespace Decentraland.Terrain
             if (TerrainData.RenderTreesAndDetail && renderGrassIndirect)
                 GrassIndirectRenderer.Render(TerrainData, camera, renderToAllCameras);
 
-            Render(TerrainData, camera, renderToAllCameras, renderGrassIndirect);
+            Render(TerrainData, camera, renderToAllCameras, renderGrassIndirect, this);
         }
 
         private void OnDrawGizmosSelected()
@@ -96,7 +97,7 @@ namespace Decentraland.Terrain
             var magicPattern = new NativeArray<int4>(16, Allocator.Persistent,
                 NativeArrayOptions.UninitializedMemory);
 
-            // x and y are relative parcel coordinates, z is the mesh to use (0 is center piece, 1 is
+            // x and y are relative parcel coordinates, z is the mesh to use (0 is middle piece, 1 is
             // edge piece, and 2 is corner piece), and w is the rotation around the Y axis. Ground
             // meshes are to be placed in a 2x2 square (items 0 to 3) and then in an ever expanding
             // concentric rings around that (items 4 to 15), doubling the parcel coordinate values after
@@ -246,17 +247,22 @@ namespace Decentraland.Terrain
 
             bool renderTreesAndDetail = terrainData.RenderTreesAndDetail
                                         && (terrainData.TreePrototypes.Length > 0
-                                            || terrainData.DetailPrototypes.Length > 0);
+                                            || terrainData.ClutterPrototypes.Length > 0
+                                            || terrainData.GrassPrototypes.Length > 0);
 
             JobHandle scatterObjects;
             NativeList<TreeInstance> treeInstances;
             NativeArray<int> treeInstanceCounts;
-            NativeList<DetailInstance> detailInstances;
-            NativeArray<int> detailInstanceCounts;
+            NativeList<ClutterInstance> clutterInstances;
+            NativeArray<int> clutterInstanceCounts;
+            NativeList<GrassInstance> grassInstances;
+            NativeArray<int> grassInstanceCounts;
             JobHandle prepareTreeRenderList;
             NativeList<Matrix4x4> treeTransforms;
-            JobHandle prepareDetailRenderList;
-            NativeList<Matrix4x4> detailTransforms;
+            JobHandle prepareClutterRenderList;
+            NativeList<Matrix4x4> clutterTransforms;
+            JobHandle prepareGrassRenderList;
+            NativeList<Matrix4x4> grassTransforms;
 
             if (renderTreesAndDetail)
             {
@@ -304,17 +310,54 @@ namespace Decentraland.Terrain
                 }
 
                 // Deallocated by ScatterObjectsJob
-                var detailPrototypes = new NativeArray<DetailPrototypeData>(
-                    terrainData.DetailPrototypes.Length, Allocator.TempJob,
+                var clutterPrototypes = new NativeArray<ClutterPrototypeData>(
+                    terrainData.ClutterPrototypes.Length, Allocator.TempJob,
                     NativeArrayOptions.UninitializedMemory);
 
-                for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
-                {
-                    DetailPrototype prototype = terrainData.DetailPrototypes[prototypeIndex];
+                int clutterMeshCount = 0;
 
-                    detailPrototypes[prototypeIndex] = new DetailPrototypeData()
+                for (int prototypeIndex = 0; prototypeIndex < clutterPrototypes.Length; prototypeIndex++)
+                {
+                    ClutterPrototype prototype = terrainData.ClutterPrototypes[prototypeIndex];
+
+                    clutterPrototypes[prototypeIndex] = new ClutterPrototypeData()
                     {
-                        scatterMode = prototype.ScatterMode,
+                        localSize = prototype.LocalSize,
+                        lod0MeshIndex = clutterMeshCount
+                    };
+
+                    clutterMeshCount += prototype.Lods.Length;
+                }
+
+                // Deallocated by ScatterObjectsJob
+                var clutterLods = new NativeArray<ClutterLODData>(clutterMeshCount, Allocator.TempJob,
+                    NativeArrayOptions.UninitializedMemory);
+
+                for (int prototypeIndex = 0; prototypeIndex < clutterPrototypes.Length; prototypeIndex++)
+                {
+                    ClutterLOD[] lods = terrainData.ClutterPrototypes[prototypeIndex].Lods;
+                    int lod0MeshIndex = clutterPrototypes[prototypeIndex].lod0MeshIndex;
+
+                    for (int lodIndex = 0; lodIndex < lods.Length; lodIndex++)
+                    {
+                        clutterLods[lod0MeshIndex + lodIndex] = new ClutterLODData()
+                        {
+                            minScreenSize = lods[lodIndex].MinScreenSize
+                        };
+                    }
+                }
+
+                // Deallocated by ScatterObjectsJob
+                var grassPrototypes = new NativeArray<GrassPrototypeData>(
+                    terrainData.GrassPrototypes.Length, Allocator.TempJob,
+                    NativeArrayOptions.UninitializedMemory);
+
+                for (int prototypeIndex = 0; prototypeIndex < grassPrototypes.Length; prototypeIndex++)
+                {
+                    GrassPrototype prototype = terrainData.GrassPrototypes[prototypeIndex];
+
+                    grassPrototypes[prototypeIndex] = new GrassPrototypeData()
+                    {
                         density = prototype.Density,
                         minScaleXZ = prototype.MinScaleXZ,
                         maxScaleXZ = prototype.MaxScaleXZ,
@@ -326,7 +369,10 @@ namespace Decentraland.Terrain
                 treeInstances = new NativeList<TreeInstance>(terrainData.TreeInstanceCapacity,
                     Allocator.TempJob);
 
-                detailInstances = new NativeList<DetailInstance>(terrainData.DetailInstanceCapacity,
+                clutterInstances = new NativeList<ClutterInstance>(terrainData.ClutterInstanceCapacity,
+                    Allocator.TempJob);
+
+                grassInstances = new NativeList<GrassInstance>(terrainData.GrassInstanceCapacity,
                     Allocator.TempJob);
 
                 var scatterObjectsJob = new ScatterObjectsJob()
@@ -339,10 +385,13 @@ namespace Decentraland.Terrain
                     clipPlanes = clipPlanes,
                     treePrototypes = treePrototypes,
                     treeLods = treeLods,
-                    detailPrototypes = detailPrototypes,
+                    clutterPrototypes = clutterPrototypes,
+                    clutterLods = clutterLods,
+                    grassPrototypes = grassPrototypes,
                     renderGrassIndirect = renderGrassIndirect,
                     treeInstances = treeInstances.AsParallelWriter(),
-                    detailInstances = detailInstances.AsParallelWriter()
+                    clutterInstances = clutterInstances.AsParallelWriter(),
+                    grassInstances = grassInstances.AsParallelWriter()
                 };
 
                 scatterObjects = scatterObjectsJob.Schedule(clipRect.width * clipRect.height);
@@ -359,31 +408,47 @@ namespace Decentraland.Terrain
 
                 prepareTreeRenderList = prepareTreeRenderListJob.Schedule(scatterObjects);
 
-                detailInstanceCounts = new NativeArray<int>(detailPrototypes.Length,
-                    Allocator.TempJob);
+                clutterInstanceCounts = new NativeArray<int>(clutterMeshCount, Allocator.TempJob);
+                clutterTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
 
-                detailTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
-
-                var prepareDetailRenderListJob = new PrepareDetailRenderListJob()
+                var prepareClutterRenderListJob = new PrepareClutterRenderListJob()
                 {
-                    instances = detailInstances,
-                    instanceCounts = detailInstanceCounts,
-                    transforms = detailTransforms
+                    instances = clutterInstances,
+                    instanceCounts = clutterInstanceCounts,
+                    transforms = clutterTransforms
                 };
 
-                prepareDetailRenderList = prepareDetailRenderListJob.Schedule(scatterObjects);
+                prepareClutterRenderList = prepareClutterRenderListJob.Schedule(scatterObjects);
+
+                grassInstanceCounts = new NativeArray<int>(grassPrototypes.Length,
+                    Allocator.TempJob);
+
+                grassTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
+
+                var prepareGrassRenderListJob = new PrepareGrassRenderListJob()
+                {
+                    instances = grassInstances,
+                    instanceCounts = grassInstanceCounts,
+                    transforms = grassTransforms
+                };
+
+                prepareGrassRenderList = prepareGrassRenderListJob.Schedule(scatterObjects);
             }
             else
             {
                 scatterObjects = default;
                 treeInstances = default;
                 treeInstanceCounts = default;
-                detailInstances = default;
-                detailInstanceCounts = default;
+                clutterInstances = default;
+                clutterInstanceCounts = default;
+                grassInstances = default;
+                grassInstanceCounts = default;
                 prepareTreeRenderList = default;
                 treeTransforms = default;
-                prepareDetailRenderList = default;
-                detailTransforms = default;
+                prepareClutterRenderList = default;
+                clutterTransforms = default;
+                prepareGrassRenderList = default;
+                grassTransforms = default;
             }
 
             var renderParams = new RenderParams()
@@ -450,42 +515,105 @@ namespace Decentraland.Terrain
                 treeInstanceCounts.Dispose();
                 treeTransforms.Dispose();
 
-                prepareDetailRenderList.Complete();
+                prepareClutterRenderList.Complete();
 
-                if (detailInstances.Length > detailInstances.Capacity)
+                if (clutterInstances.Length > clutterInstances.Capacity)
                 {
-                    terrainData.DetailInstanceCapacity
-                        = (int)ceil(terrainData.DetailInstanceCapacity * 1.1f);
+                    terrainData.ClutterInstanceCapacity
+                        = (int)ceil(terrainData.ClutterInstanceCapacity * 1.1f);
 
                     LogHandler.LogFormat(LogType.Warning, terrainData,
                         "The {0} list ran out of space. Increasing capacity to {1}.",
-                        nameof(detailInstances), terrainData.DetailInstanceCapacity);
+                        nameof(clutterInstances), terrainData.ClutterInstanceCapacity);
                 }
 
 #if UNITY_EDITOR
                 if (renderer != null)
-                    renderer.DetailInstanceCount = detailInstances.Length;
+                    renderer.ClutterInstanceCount = clutterInstances.Length;
 #endif
 
-                detailInstances.Dispose();
+                clutterInstances.Dispose();
+                RenderClutter(terrainData, renderParams, clutterTransforms.AsArray(), clutterInstanceCounts);
+                clutterInstanceCounts.Dispose();
+                clutterTransforms.Dispose();
 
-                RenderDetail(terrainData, renderParams, detailTransforms.AsArray(),
-                    detailInstanceCounts);
+                prepareGrassRenderList.Complete();
 
-                detailInstanceCounts.Dispose();
-                detailTransforms.Dispose();
+                if (grassInstances.Length > grassInstances.Capacity)
+                {
+                    terrainData.GrassInstanceCapacity
+                        = (int)ceil(terrainData.GrassInstanceCapacity * 1.1f);
+
+                    LogHandler.LogFormat(LogType.Warning, terrainData,
+                        "The {0} list ran out of space. Increasing capacity to {1}.",
+                        nameof(grassInstances), terrainData.GrassInstanceCapacity);
+                }
+
+#if UNITY_EDITOR
+                if (renderer != null)
+                    renderer.GrassInstanceCount = grassInstances.Length;
+#endif
+
+                grassInstances.Dispose();
+
+                RenderGrass(terrainData, renderParams, grassTransforms.AsArray(),
+                    grassInstanceCounts);
+
+                grassInstanceCounts.Dispose();
+                grassTransforms.Dispose();
             }
 
             Profiler.EndSample();
         }
 
-        private static void RenderDetail(TerrainData terrainData, RenderParams renderParams,
+        private static void RenderClutter(TerrainData terrainData, RenderParams renderParams,
             NativeArray<Matrix4x4> instanceData, NativeArray<int> instanceCounts)
         {
             if (instanceData.Length == 0)
                 return;
 
-            DetailPrototype[] prototypes = terrainData.DetailPrototypes;
+            ClutterPrototype[] prototypes = terrainData.ClutterPrototypes;
+            int meshIndex = 0;
+            int startInstance = 0;
+            renderParams.matProps = null;
+            renderParams.shadowCastingMode = ShadowCastingMode.On;
+
+            for (int prototypeIndex = 0; prototypeIndex < prototypes.Length; prototypeIndex++)
+            {
+                ClutterLOD[] lods = prototypes[prototypeIndex].Lods;
+
+                for (int lodIndex = 0; lodIndex < lods.Length; lodIndex++)
+                {
+                    // When you concatenate the LOD lists of all the prototypes, you get the list
+                    // meshIndex indexes into.
+                    int instanceCount = instanceCounts[meshIndex];
+                    meshIndex++;
+
+                    if (instanceCount == 0)
+                        continue;
+
+                    ClutterLOD lod = lods[lodIndex];
+
+                    for (int subMeshIndex = 0; subMeshIndex < lod.Materials.Length; subMeshIndex++)
+                    {
+                        renderParams.material = lod.Materials[subMeshIndex];
+
+                        Graphics.RenderMeshInstanced(renderParams, lod.Mesh, subMeshIndex, instanceData,
+                            instanceCount, startInstance);
+                    }
+
+                    startInstance += instanceCount;
+                }
+            }
+        }
+
+        private static void RenderGrass(TerrainData terrainData, RenderParams renderParams,
+            NativeArray<Matrix4x4> instanceData, NativeArray<int> instanceCounts)
+        {
+            if (instanceData.Length == 0)
+                return;
+
+            GrassPrototype[] prototypes = terrainData.GrassPrototypes;
             int startInstance = 0;
             renderParams.matProps = null;
             renderParams.shadowCastingMode = ShadowCastingMode.Off;
@@ -498,7 +626,7 @@ namespace Decentraland.Terrain
                 if (instanceCount == 0)
                     continue;
 
-                DetailPrototype prototype = prototypes[prototypeIndex];
+                GrassPrototype prototype = prototypes[prototypeIndex];
                 renderParams.material = prototype.Material;
 
                 Graphics.RenderMeshInstanced(renderParams, prototype.Mesh, 0, instanceData,
@@ -690,9 +818,9 @@ namespace Decentraland.Terrain
         }
 
         [BurstCompile]
-        private struct PrepareDetailRenderListJob : IJob
+        private struct PrepareClutterRenderListJob : IJob
         {
-            public NativeList<DetailInstance> instances;
+            public NativeList<ClutterInstance> instances;
             [WriteOnly] public NativeArray<int> instanceCounts;
             public NativeList<Matrix4x4> transforms;
 
@@ -713,7 +841,51 @@ namespace Decentraland.Terrain
 
                 for (int instanceIndex = 0; instanceIndex < totalInstanceCount; instanceIndex++)
                 {
-                    DetailInstance instance = instances[instanceIndex];
+                    ClutterInstance instance = instances[instanceIndex];
+
+                    if (meshIndex < instance.meshIndex)
+                    {
+                        instanceCounts[meshIndex] = instanceCount;
+                        meshIndex = instance.meshIndex;
+                        instanceCount = 0;
+                    }
+
+                    instanceCount++;
+
+                    transforms.AddNoResize(Matrix4x4.TRS(instance.position,
+                        Quaternion.Euler(0f, instance.rotationY, 0f),
+                        new Vector3(instance.scale, instance.scale, instance.scale)));
+                }
+
+                instanceCounts[meshIndex] = instanceCount;
+            }
+        }
+
+        [BurstCompile]
+        private struct PrepareGrassRenderListJob : IJob
+        {
+            public NativeList<GrassInstance> instances;
+            [WriteOnly] public NativeArray<int> instanceCounts;
+            public NativeList<Matrix4x4> transforms;
+
+            public void Execute()
+            {
+                // If NativeList<T>.ParallelWriter runs out of space, the length of the list will exceed
+                // its capacity. This code deals with that.
+                int totalInstanceCount = min(instances.Length, instances.Capacity);
+
+                if (totalInstanceCount == 0)
+                    return;
+
+                instances.AsArray().GetSubArray(0, totalInstanceCount).Sort();
+                transforms.Capacity = totalInstanceCount;
+
+                int instanceCount = 0;
+                int meshIndex = 0;
+
+                for (int instanceIndex = 0; instanceIndex < totalInstanceCount; instanceIndex++)
+                {
+                    GrassInstance instance = instances[instanceIndex];
 
                     if (meshIndex < instance.meshIndex)
                     {
@@ -755,7 +927,7 @@ namespace Decentraland.Terrain
                 int instanceCount = 0;
                 int meshIndex = 0;
 
-                for (int instanceIndex = 0; instanceIndex < instances.Length; instanceIndex++)
+                for (int instanceIndex = 0; instanceIndex < totalInstanceCount; instanceIndex++)
                 {
                     TreeInstance instance = instances[instanceIndex];
 
@@ -788,10 +960,13 @@ namespace Decentraland.Terrain
             [ReadOnly] public NativeArray<ClipPlane> clipPlanes;
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreePrototypeData> treePrototypes;
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreeLODData> treeLods;
-            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<DetailPrototypeData> detailPrototypes;
+            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<ClutterPrototypeData> clutterPrototypes;
+            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<ClutterLODData> clutterLods;
+            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<GrassPrototypeData> grassPrototypes;
             public bool renderGrassIndirect;
             public NativeList<TreeInstance>.ParallelWriter treeInstances;
-            public NativeList<DetailInstance>.ParallelWriter detailInstances;
+            public NativeList<ClutterInstance>.ParallelWriter clutterInstances;
+            public NativeList<GrassInstance>.ParallelWriter grassInstances;
 
             public void Execute(int index)
             {
@@ -803,75 +978,120 @@ namespace Decentraland.Terrain
                     return;
                 }
 
-                // Tree scattering
-
                 Random random = terrainData.GetRandom(parcel);
-                ReadOnlySpan<byte2> treePositions = terrainData.GetTreePositions(parcel);
+                NativeList<float2> obstaclePositions;
 
-                for (int i = 0; i < treePositions.Length; i++)
+                if (treePrototypes.Length > 0)
                 {
-                    if (!terrainData.TryGenerateTree(parcel, treePositions[i], ref random,
-                            out int prototypeIndex, out float3 position, out float rotationY))
+                    ReadOnlySpan<byte2> treePositions = terrainData.GetTreePositions(parcel);
+                    obstaclePositions = new NativeList<float2>(treePositions.Length, Allocator.Temp);
+
+                    for (int i = 0; i < treePositions.Length; i++)
                     {
-                        continue;
-                    }
-
-                    TreePrototypeData prototype = treePrototypes[prototypeIndex];
-                    float screenSize = prototype.localSize / distance(position, cameraPosition);
-                    int meshIndex = prototype.lod0MeshIndex;
-
-                    int meshEnd = prototypeIndex + 1 < treePrototypes.Length
-                        ? treePrototypes[prototypeIndex + 1].lod0MeshIndex
-                        : treeLods.Length;
-
-                    while (meshIndex < meshEnd && treeLods[meshIndex].minScreenSize > screenSize)
-                        meshIndex++;
-
-                    if (meshIndex < meshEnd)
-                    {
-                        treeInstances.TryAddNoResize(new TreeInstance()
+                        if (!terrainData.TryGenerateTree(parcel, treePositions[i], ref random,
+                                out int prototypeIndex, out float3 position, out float rotationY))
                         {
-                            meshIndex = meshIndex,
-                            position = position,
-                            rotationY = rotationY
-                        });
+                            continue;
+                        }
+
+                        TreePrototypeData prototype = treePrototypes[prototypeIndex];
+                        float screenSize = prototype.localSize / distance(position, cameraPosition);
+                        int meshIndex = prototype.lod0MeshIndex;
+
+                        int meshEnd = prototypeIndex + 1 < treePrototypes.Length
+                            ? treePrototypes[prototypeIndex + 1].lod0MeshIndex
+                            : treeLods.Length;
+
+                        while (meshIndex < meshEnd && treeLods[meshIndex].minScreenSize > screenSize)
+                            meshIndex++;
+
+                        if (meshIndex < meshEnd)
+                        {
+                            var instance = new TreeInstance()
+                            {
+                                meshIndex = meshIndex,
+                                position = position,
+                                rotationY = rotationY
+                            };
+
+                            if (!treeInstances.TryAddNoResize(instance))
+                                break;
+
+                            obstaclePositions.Add(position.xz);
+                        }
                     }
                 }
-
-                // Detail scattering
-
-                if (renderGrassIndirect)
-                    return;
-
-                float3 parcelCenter;
-                parcelCenter.x = (parcel.x + 0.5f) * terrainData.parcelSize;
-                parcelCenter.z = (parcel.y + 0.5f) * terrainData.parcelSize;
-                parcelCenter.y = terrainData.GetHeight(parcelCenter.x, parcelCenter.z);
-
-                if (distancesq(parcelCenter, cameraPosition) > detailSqrDistance)
-                    return;
-
-                for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
+                else
                 {
-                    DetailPrototypeData prototype = detailPrototypes[prototypeIndex];
+                    obstaclePositions = new NativeList<float2>(0, Allocator.Temp);
+                }
 
-                    switch (prototype.scatterMode)
+                if (clutterPrototypes.Length > 0)
+                {
+                    var clutterPositions = new NativeList<float2>(2, Allocator.Temp);
+
+                    terrainData.GenerateClutterPositions(parcel, obstaclePositions, ref random,
+                        clutterPositions);
+
+                    for (int i = 0; i < clutterPositions.Length; i++)
                     {
-                        case DetailScatterMode.JitteredGrid:
-                            if (!JitteredGrid(parcel, prototypeIndex, ref random, detailInstances))
-                                goto outOfSpace;
+                        float3 position = default;
+                        position.xz = clutterPositions[i];
 
-                            break;
+                        if (!terrainData.TryGenerateClutter(parcel, position.xz, ref random, out int prototypeIndex,
+                                out float rotationY, out float scale))
+                        {
+                            continue;
+                        }
+
+                        position.y = terrainData.GetHeight(position.x, position.z);
+                        ClutterPrototypeData prototype = clutterPrototypes[prototypeIndex];
+                        float screenSize = prototype.localSize / distance(position, cameraPosition);
+                        int meshIndex = prototype.lod0MeshIndex;
+
+                        int meshEnd = prototypeIndex + 1 < clutterPrototypes.Length
+                            ? clutterPrototypes[prototypeIndex + 1].lod0MeshIndex
+                            : clutterLods.Length;
+
+                        while (meshIndex < meshEnd && clutterLods[meshIndex].minScreenSize > screenSize)
+                            meshIndex++;
+
+                        if (meshIndex < meshEnd)
+                        {
+                            var instance = new ClutterInstance()
+                            {
+                                meshIndex = meshIndex,
+                                position = position,
+                                rotationY = rotationY,
+                                scale = scale
+                            };
+
+                            if (!clutterInstances.TryAddNoResize(instance))
+                                break;
+                        }
                     }
                 }
 
-                outOfSpace: ;
+                obstaclePositions.Dispose();
+
+                if (!renderGrassIndirect && grassPrototypes.Length > 0)
+                {
+                    float3 parcelCenter;
+                    parcelCenter.x = (parcel.x + 0.5f) * terrainData.parcelSize;
+                    parcelCenter.z = (parcel.y + 0.5f) * terrainData.parcelSize;
+                    parcelCenter.y = terrainData.GetHeight(parcelCenter.x, parcelCenter.z);
+
+                    if (distancesq(parcelCenter, cameraPosition) <= detailSqrDistance)
+                        for (int prototypeIndex = 0; prototypeIndex < grassPrototypes.Length; prototypeIndex++)
+                            if (!JitteredGrid(parcel, prototypeIndex, ref random, grassInstances))
+                                break;
+                }
             }
 
             private bool JitteredGrid(int2 parcel, int meshIndex,
-                ref Random random, NativeList<DetailInstance>.ParallelWriter instances)
+                ref Random random, NativeList<GrassInstance>.ParallelWriter instances)
             {
-                DetailPrototypeData prototype = detailPrototypes[meshIndex];
+                GrassPrototypeData prototype = grassPrototypes[meshIndex];
                 int gridSize = (int)(prototype.density * terrainData.parcelSize);
                 float invGridSize = (float)terrainData.parcelSize / gridSize;
                 float2 corner0 = parcel * terrainData.parcelSize;
@@ -894,7 +1114,7 @@ namespace Decentraland.Terrain
                     float scaleXZ = random.NextFloat(prototype.minScaleXZ, prototype.maxScaleXZ);
                     float scaleY = random.NextFloat(prototype.minScaleY, prototype.maxScaleY);
 
-                    DetailInstance instance = new DetailInstance()
+                    GrassInstance instance = new GrassInstance()
                     {
                         meshIndex = meshIndex,
                         position = position,
@@ -911,7 +1131,28 @@ namespace Decentraland.Terrain
             }
         }
 
-        private struct DetailInstance : IComparable<DetailInstance>
+        private struct ClutterInstance : IComparable<ClutterInstance>
+        {
+            public int meshIndex;
+            public float3 position;
+            public float rotationY;
+            public float scale;
+
+            public int CompareTo(ClutterInstance other) => meshIndex - other.meshIndex;
+        }
+
+        private struct ClutterLODData
+        {
+            public float minScreenSize;
+        }
+
+        private struct ClutterPrototypeData
+        {
+            public float localSize;
+            public int lod0MeshIndex;
+        }
+
+        private struct GrassInstance : IComparable<GrassInstance>
         {
             public int meshIndex;
             public float3 position;
@@ -919,12 +1160,11 @@ namespace Decentraland.Terrain
             public float scaleXZ;
             public float scaleY;
 
-            public int CompareTo(DetailInstance other) => meshIndex - other.meshIndex;
+            public int CompareTo(GrassInstance other) => meshIndex - other.meshIndex;
         }
 
-        private struct DetailPrototypeData
+        private struct GrassPrototypeData
         {
-            public DetailScatterMode scatterMode;
             public float density;
             public float minScaleXZ;
             public float maxScaleXZ;

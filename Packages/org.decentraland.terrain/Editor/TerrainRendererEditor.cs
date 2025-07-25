@@ -14,9 +14,10 @@ namespace Decentraland.Terrain
 
             EditorGUILayout.LabelField("Ground Instance Count", target.GroundInstanceCount.ToString());
             EditorGUILayout.LabelField("Tree Instance Count", target.TreeInstanceCount.ToString());
-            EditorGUILayout.LabelField("Detail Instance Count", target.DetailInstanceCount.ToString());
+            EditorGUILayout.LabelField("Clutter Instance Count", target.ClutterInstanceCount.ToString());
+            EditorGUILayout.LabelField("Grass Instance Count", target.GrassInstanceCount.ToString());
         }
-        
+
         private bool HasFrameBounds() =>
             true;
 

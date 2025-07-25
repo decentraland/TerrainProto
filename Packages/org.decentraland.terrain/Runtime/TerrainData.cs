@@ -21,17 +21,19 @@ namespace Decentraland.Terrain
         [field: SerializeField] private float TreeSpacing { get; set; }
         [field: SerializeField, Range(0f, 1f)] private float TreeDensity { get; set; }
         [field: SerializeField] public float DetailDistance { get; set; }
-        [field: SerializeField] public bool RenderGround { get; set; }
-        [field: SerializeField] public bool RenderTreesAndDetail { get; set; }
+        [field: SerializeField] public bool RenderGround { get; set; } = true;
+        [field: SerializeField] public bool RenderTreesAndDetail { get; set; } = true;
         [field: SerializeField] internal int GroundInstanceCapacity { get; set; }
         [field: SerializeField] internal int TreeInstanceCapacity { get; set; }
-        [field: SerializeField] internal int DetailInstanceCapacity { get; set; }
+        [field: SerializeField] internal int ClutterInstanceCapacity { get; set; }
+        [field: SerializeField] internal int GrassInstanceCapacity { get; set; }
 
         [field: SerializeField, EnumIndexedArray(typeof(GroundMeshPiece))]
         internal Mesh[] GroundMeshes { get; private set; }
 
         [field: SerializeField] internal TreePrototype[] TreePrototypes { get; private set; }
-        [field: SerializeField] internal DetailPrototype[] DetailPrototypes { get; private set; }
+        [field: SerializeField] internal ClutterPrototype[] ClutterPrototypes { get; private set; }
+        [field: SerializeField] internal GrassPrototype[] GrassPrototypes { get; private set; }
 
         protected FunctionPointer<GetHeightDelegate> getHeight;
         protected FunctionPointer<GetNormalDelegate> getNormal;
@@ -45,6 +47,12 @@ namespace Decentraland.Terrain
 
         private void OnValidate()
         {
+            ClutterInstanceCapacity = max(ClutterInstanceCapacity, 1);
+            GrassInstanceCapacity = max(GrassInstanceCapacity, 1);
+            GroundInstanceCapacity = max(GroundInstanceCapacity, 1);
+            ParcelSize = max(ParcelSize, 1);
+            RandomSeed = max(RandomSeed, 1u);
+            TreeInstanceCapacity = max(TreeInstanceCapacity, 1);
             TreeSpacing = max(TreeSpacing, 1f);
         }
 
@@ -115,9 +123,9 @@ namespace Decentraland.Terrain
 
             generateTreePositions.Complete();
 
-            return new TerrainDataData(ParcelSize, Bounds, MaxHeight, OccupancyMap, RandomSeed,
-                TreeDensity, TreePrototypes, treeIndices, treePositions.AsArray(), getHeight,
-                getNormal);
+            return new TerrainDataData(RandomSeed, ParcelSize, Bounds, MaxHeight, OccupancyMap,
+                TreeDensity, TreePrototypes, treeIndices, treePositions.AsArray(), ClutterPrototypes,
+                getHeight, getNormal);
         }
 
         [BurstCompile]
@@ -177,15 +185,16 @@ namespace Decentraland.Terrain
 
     internal readonly struct TerrainDataData
     {
+        private readonly uint randomSeed;
         public readonly int parcelSize;
         public readonly float maxHeight;
         [ReadOnly] private readonly NativeArray<byte> occupancyMap;
         private readonly int occupancyMapSize;
         private readonly float treeDensity;
-        private readonly uint randomSeed;
         [ReadOnly, DeallocateOnJobCompletion] private readonly NativeArray<TreePrototypeData> treePrototypes;
         [ReadOnly] private readonly NativeArray<int> treeIndices;
         [ReadOnly] private readonly NativeArray<byte2> treePositions;
+        [ReadOnly, DeallocateOnJobCompletion] private readonly NativeArray<ClutterPrototypeData> clutterPrototypes;
         private readonly FunctionPointer<GetHeightDelegate> getHeight;
         private readonly FunctionPointer<GetNormalDelegate> getNormal;
 
@@ -194,16 +203,17 @@ namespace Decentraland.Terrain
 
         private static NativeArray<byte> emptyOccupancyMap;
 
-        public TerrainDataData(int parcelSize, RectInt bounds, float maxHeight, Texture2D occupancyMap,
-            uint randomSeed, float treeDensity, TreePrototype[] treePrototypes,
+        public TerrainDataData(uint randomSeed, int parcelSize, RectInt bounds, float maxHeight,
+            Texture2D occupancyMap, float treeDensity, TreePrototype[] treePrototypes,
             NativeArray<int> treeIndices, NativeArray<byte2> treePositions,
-            FunctionPointer<GetHeightDelegate> getHeight, FunctionPointer<GetNormalDelegate> getNormal)
+            ClutterPrototype[] clutterPrototypes, FunctionPointer<GetHeightDelegate> getHeight,
+            FunctionPointer<GetNormalDelegate> getNormal)
         {
+            this.randomSeed = randomSeed;
             this.parcelSize = parcelSize;
             this.bounds = int4(bounds.xMin, bounds.yMin, bounds.xMax, bounds.yMax);
             this.maxHeight = maxHeight;
             this.treeDensity = treeDensity;
-            this.randomSeed = randomSeed;
             this.treeIndices = treeIndices;
             this.treePositions = treePositions;
             this.getHeight = getHeight;
@@ -227,77 +237,43 @@ namespace Decentraland.Terrain
 
             for (int i = 0; i < treePrototypes.Length; i++)
                 this.treePrototypes[i] = new TreePrototypeData(treePrototypes[i]);
+
+            this.clutterPrototypes = new NativeArray<ClutterPrototypeData>(clutterPrototypes.Length,
+                Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+
+            for (int i = 0; i < clutterPrototypes.Length; i++)
+                this.clutterPrototypes[i] = new ClutterPrototypeData(clutterPrototypes[i]);
         }
 
         public bool BoundsOverlaps(int4 bounds) =>
             all(this.bounds.zw >= bounds.xy & this.bounds.xy <= bounds.zw);
 
-        public bool TryGenerateTree(int2 parcel, byte2 localPosition, ref Random random,
-            out int prototypeIndex, out float3 position, out float rotationY)
+        public void GenerateClutterPositions(int2 parcel, NativeList<float2> obstaclePositions,
+            ref Random random, NativeList<float2> clutterPositions)
         {
-            prototypeIndex = -1;
-            position = default;
-            rotationY = 0f;
+            const float minSqrDistance = 16f;
 
-            if (random.NextFloat() > treeDensity)
-                return false;
-
-            prototypeIndex = random.NextInt(treePrototypes.Length);
-            position.xz = localPosition * (parcelSize * (1f / 255f));
-            float canopyRadius = treePrototypes[prototypeIndex].canopyRadius;
-
-            if (position.x < canopyRadius)
+            static bool CanEmitPoint(in NativeList<float2> points, in float2 point)
             {
-                if (IsOccupied(int2(parcel.x - 1, parcel.y)))
-                    return false;
-
-                if (position.z < canopyRadius)
-                {
-                    if (IsOccupied(int2(parcel.x - 1, parcel.y - 1)))
+                for (int i = 0; i < points.Length; i++)
+                    if (distancesq(point, points[i]) < minSqrDistance)
                         return false;
-                }
+
+                return true;
             }
 
-            if (parcelSize - position.x < canopyRadius)
-            {
-                if (IsOccupied(int2(parcel.x + 1, parcel.y)))
-                    return false;
+            int positionCount = min(clutterPositions.Capacity, 2);
 
-                if (parcelSize - position.z < canopyRadius)
+            for (int i = 0; i < positionCount; i++)
+            {
+                float2 point = random.NextFloat2(parcelSize) + parcel * parcelSize;
+
+                if (CanEmitPoint(in obstaclePositions, point))
                 {
-                    if (IsOccupied(int2(parcel.x + 1, parcel.y + 1)))
-                        return false;
+                    obstaclePositions.Add(point);
+                    clutterPositions.Add(point);
                 }
             }
-
-            if (position.z < canopyRadius)
-            {
-                if (IsOccupied(int2(parcel.x, parcel.y - 1)))
-                    return false;
-
-                if (parcelSize - position.x < canopyRadius)
-                {
-                    if (IsOccupied(int2(parcel.x + 1, parcel.y - 1)))
-                        return false;
-                }
-            }
-
-            if (parcelSize - position.z < canopyRadius)
-            {
-                if (IsOccupied(int2(parcel.x, parcel.y + 1)))
-                    return false;
-
-                if (position.x < canopyRadius)
-                {
-                    if (IsOccupied(int2(parcel.x - 1, parcel.y + 1)))
-                        return false;
-                }
-            }
-
-            position.xz += parcel * parcelSize;
-            position.y = GetHeight(position.x, position.z);
-            rotationY = random.NextFloat(-180f, 180f);
-            return true;
         }
 
         public float GetHeight(float x, float z)
@@ -415,6 +391,59 @@ namespace Decentraland.Terrain
             return true;
         }
 
+        private bool OverlapsOccupiedParcel(int2 parcel, float2 localPosition, float radius)
+        {
+            if (localPosition.x < radius)
+            {
+                if (IsOccupied(int2(parcel.x - 1, parcel.y)))
+                    return true;
+
+                if (localPosition.y < radius)
+                {
+                    if (IsOccupied(int2(parcel.x - 1, parcel.y - 1)))
+                        return true;
+                }
+            }
+
+            if (parcelSize - localPosition.x < radius)
+            {
+                if (IsOccupied(int2(parcel.x + 1, parcel.y)))
+                    return true;
+
+                if (parcelSize - localPosition.y < radius)
+                {
+                    if (IsOccupied(int2(parcel.x + 1, parcel.y + 1)))
+                        return true;
+                }
+            }
+
+            if (localPosition.y < radius)
+            {
+                if (IsOccupied(int2(parcel.x, parcel.y - 1)))
+                    return true;
+
+                if (parcelSize - localPosition.x < radius)
+                {
+                    if (IsOccupied(int2(parcel.x + 1, parcel.y - 1)))
+                        return true;
+                }
+            }
+
+            if (parcelSize - localPosition.y < radius)
+            {
+                if (IsOccupied(int2(parcel.x, parcel.y + 1)))
+                    return true;
+
+                if (localPosition.x < radius)
+                {
+                    if (IsOccupied(int2(parcel.x - 1, parcel.y + 1)))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
         internal RectInt PositionToParcelRect(float2 centerXZ, float radius)
         {
             float invParcelSize = 1f / parcelSize;
@@ -438,6 +467,60 @@ namespace Decentraland.Terrain
             return lerp(top, bottom, t.y) * (1f / 255f);
         }
 
+        public bool TryGenerateClutter(int2 parcel, float2 positionXZ, ref Random random,
+            out int prototypeIndex, out float rotationY, out float scale)
+        {
+            rotationY = 0f;
+
+            prototypeIndex = random.NextInt(clutterPrototypes.Length);
+            ClutterPrototypeData prototype = clutterPrototypes[prototypeIndex];
+            scale = random.NextFloat(prototype.minScale, prototype.maxScale);
+            float radius = prototype.radius * scale;
+
+            if (OverlapsOccupiedParcel(parcel, positionXZ - parcel * parcelSize, radius))
+                return false;
+
+            rotationY = random.NextFloat(-180f, 180f);
+            return true;
+        }
+
+        public bool TryGenerateTree(int2 parcel, byte2 localPosition, ref Random random,
+            out int prototypeIndex, out float3 position, out float rotationY)
+        {
+            prototypeIndex = -1;
+            position = default;
+            rotationY = 0f;
+
+            if (random.NextFloat() > treeDensity)
+                return false;
+
+            prototypeIndex = random.NextInt(treePrototypes.Length);
+            position.xz = localPosition * (parcelSize * (1f / 255f));
+            float canopyRadius = treePrototypes[prototypeIndex].canopyRadius;
+
+            if (OverlapsOccupiedParcel(parcel, position.xz, canopyRadius))
+                return false;
+
+            position.xz += parcel * parcelSize;
+            position.y = GetHeight(position.x, position.z);
+            rotationY = random.NextFloat(-180f, 180f);
+            return true;
+        }
+
+        private readonly struct ClutterPrototypeData
+        {
+            public readonly float radius;
+            public readonly float minScale;
+            public readonly float maxScale;
+
+            public ClutterPrototypeData(ClutterPrototype prototype)
+            {
+                radius = prototype.Radius;
+                minScale = prototype.MinScale;
+                maxScale = prototype.MaxScale;
+            }
+        }
+
         private readonly struct TreePrototypeData
         {
             public readonly float canopyRadius;
@@ -451,45 +534,59 @@ namespace Decentraland.Terrain
         }
     }
 
-    [Serializable]
-    internal struct DetailPrototype
-    {
-        [field: SerializeField] public GameObject Source { get; private set; }
-        [field: SerializeField] public DetailScatterMode ScatterMode { get; private set; }
-        [field: SerializeField] public float Density { get; private set; }
-        [field: SerializeField] public float MinScaleXZ { get; private set; }
-        [field: SerializeField] public float MaxScaleXZ { get; private set; }
-        [field: SerializeField] public float MinScaleY { get; private set; }
-        [field: SerializeField] public float MaxScaleY { get; private set; }
-        [field: SerializeField] public Mesh Mesh { get; internal set; }
-        [field: SerializeField] public Material Material { get; internal set; }
-    }
-
-    internal enum DetailScatterMode
-    {
-        JitteredGrid
-    }
-
     public delegate float GetHeightDelegate(float x, float z);
 
     public delegate void GetNormalDelegate(float x, float z, out float3 normal);
 
     [Serializable]
+    internal struct ClutterLOD
+    {
+        [field: SerializeField] public Mesh Mesh { get; set; }
+        [field: SerializeField] public float MinScreenSize { get; set; }
+        [field: SerializeField] public Material[] Materials { get; set; }
+    }
+
+    [Serializable]
+    internal struct ClutterPrototype
+    {
+        [field: SerializeField] public GameObject Source { get; private set; }
+        [field: SerializeField] public GameObject Collider { get; set; }
+        [field: SerializeField] public float LocalSize { get; set; }
+        [field: SerializeField] public float Radius { get; private set; }
+        [field: SerializeField] public float MinScale { get; private set; }
+        [field: SerializeField] public float MaxScale { get; private set; }
+        [field: SerializeField] public ClutterLOD[] Lods { get; set; }
+    }
+
+    [Serializable]
+    internal struct GrassPrototype
+    {
+        [field: SerializeField] public GameObject Source { get; private set; }
+        [field: SerializeField] public float Density { get; private set; }
+        [field: SerializeField] public float MinScaleXZ { get; private set; }
+        [field: SerializeField] public float MaxScaleXZ { get; private set; }
+        [field: SerializeField] public float MinScaleY { get; private set; }
+        [field: SerializeField] public float MaxScaleY { get; private set; }
+        [field: SerializeField] public Mesh Mesh { get; set; }
+        [field: SerializeField] public Material Material { get; set; }
+    }
+
+    [Serializable]
     internal struct TreeLOD
     {
-        [field: SerializeField] public Mesh Mesh { get; internal set; }
-        [field: SerializeField] public float MinScreenSize { get; internal set; }
-        [field: SerializeField] public Material[] Materials { get; internal set; }
+        [field: SerializeField] public Mesh Mesh { get; set; }
+        [field: SerializeField] public float MinScreenSize { get; set; }
+        [field: SerializeField] public Material[] Materials { get; set; }
     }
 
     [Serializable]
     internal struct TreePrototype
     {
         [field: SerializeField] public GameObject Source { get; private set; }
-        [field: SerializeField] public GameObject Collider { get; internal set; }
-        [field: SerializeField] public float LocalSize { get; internal set; }
-        [field: SerializeField] public float TrunkRadius { get; internal set; }
-        [field: SerializeField] public float CanopyRadius { get; internal set; }
-        [field: SerializeField] public TreeLOD[] Lods { get; internal set; }
+        [field: SerializeField] public GameObject Collider { get; set; }
+        [field: SerializeField] public float LocalSize { get; set; }
+        [field: SerializeField] public float CanopyRadius { get; private set; }
+        [field: SerializeField] public float TrunkRadius { get; private set; }
+        [field: SerializeField] public TreeLOD[] Lods { get; set; }
     }
 }
