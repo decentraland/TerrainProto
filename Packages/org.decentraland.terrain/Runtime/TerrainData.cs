@@ -59,7 +59,9 @@ namespace Decentraland.Terrain
             ParcelSize = max(ParcelSize, 1);
             RandomSeed = max(RandomSeed, 1u);
             TreeInstanceCapacity = max(TreeInstanceCapacity, 1);
-            treePrototypes.Dispose();
+
+            if (treePrototypes.IsCreated)
+                treePrototypes.Dispose();
         }
 
         protected abstract void CompileNoiseFunctions();
