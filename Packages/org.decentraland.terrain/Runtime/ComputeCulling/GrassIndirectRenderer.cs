@@ -58,14 +58,14 @@ namespace Decentraland.Terrain
 
         public void Render(TerrainData terrainData, Camera camera, bool renderToAllCameras)
         {
-            if (terrainData.GrassPrototypes.Length == 0)
+            if (terrainData.DetailPrototypes.Length == 0)
                 return;
 
             Initialize();
 
             RunFrustumCulling(terrainData, camera);
             GenerateScatteredGrass(terrainData);
-            GrassPrototype grass = terrainData.GrassPrototypes[0];
+            DetailPrototype grass = terrainData.DetailPrototypes[0];
             SetMeshAndMaterial(grass.Mesh, grass.Material);
             RenderGrass(renderToAllCameras ? null : camera);
         }

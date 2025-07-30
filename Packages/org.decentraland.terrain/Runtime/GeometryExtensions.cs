@@ -24,12 +24,6 @@ namespace Decentraland.Terrain
             }
         }
 
-        public static float2 ToFloat2(this Vector2Int value) =>
-            float2(value.x, value.y);
-
-        public static int2 ToInt2(this Vector2Int value) =>
-            int2(value.x, value.y);
-
         public static MinMaxAABB ToMinMaxAABB(this Bounds bounds) =>
             new MinMaxAABB(bounds.min, bounds.max);
 

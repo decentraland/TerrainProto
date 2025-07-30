@@ -207,7 +207,7 @@ namespace Decentraland.Terrain
                     TreeInstance tree = parcelData.trees[j];
 
                     Gizmos.DrawWireSphere(tree.gameObject.transform.position,
-                        state.terrainData.TreePrototypes[tree.prototypeIndex].CanopyRadius);
+                        state.terrainData.TreePrototypes[tree.prototypeIndex].Radius);
                 }
             }
         }
@@ -279,24 +279,27 @@ namespace Decentraland.Terrain
                 return;
 
             Random random = terrainData.GetRandom(parcel);
-            ReadOnlySpan<byte2> treePositions = terrainData.GetTreePositions(parcel);
+            ReadOnlySpan<Terrain.TreeInstance> instances = terrainData.GetTreeInstances(parcel);
 
-            for (int i = 0; i < treePositions.Length; i++)
+            for (int i = 0; i < instances.Length; i++)
             {
-                if (!terrainData.TryGenerateTree(parcel, treePositions[i], ref random,
-                        out int prototypeIndex, out float3 position, out float rotationY))
+                if (!terrainData.TryGenerateTree(parcel, instances[i], out float3 position,
+                        out float rotationY, out float scaleXZ, out float scaleY))
                 {
                     continue;
                 }
 
+                Terrain.TreeInstance instance = instances[i];
+
                 var tree = new TreeInstance()
                 {
-                    prototypeIndex = prototypeIndex,
-                    gameObject = state.treePools[prototypeIndex].Get()
+                    prototypeIndex = instance.prototypeIndex,
+                    gameObject = state.treePools[instance.prototypeIndex].Get()
                 };
 
-                tree.gameObject.transform.SetPositionAndRotation(position,
-                    Quaternion.Euler(0f, rotationY, 0f));
+                var t = tree.gameObject.transform;
+                t.SetPositionAndRotation(position, Quaternion.Euler(0f, rotationY, 0f));
+                t.localScale = new Vector3(scaleXZ, scaleY, scaleXZ);
 
                 parcelData.trees.Add(tree);
             }

@@ -1,10 +1,14 @@
 using System;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
 using Unity.Burst;
 using Unity.Collections;
-using Unity.Jobs;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 using Unity.Mathematics.Geometry;
 using UnityEngine;
+using static Decentraland.Terrain.TerrainLog;
 using static Unity.Mathematics.math;
 using Random = Unity.Mathematics.Random;
 
@@ -18,161 +22,159 @@ namespace Decentraland.Terrain
         [field: SerializeField] public RectInt Bounds { get; set; }
         [field: SerializeField] internal float MaxHeight { get; private set; }
         [field: SerializeField] public Texture2D OccupancyMap { get; set; }
-        [field: SerializeField] private float TreeSpacing { get; set; }
-        [field: SerializeField, Range(0f, 1f)] private float TreeDensity { get; set; }
         [field: SerializeField] public float DetailDistance { get; set; }
         [field: SerializeField] public bool RenderGround { get; set; } = true;
         [field: SerializeField] public bool RenderTreesAndDetail { get; set; } = true;
         [field: SerializeField] internal int GroundInstanceCapacity { get; set; }
         [field: SerializeField] internal int TreeInstanceCapacity { get; set; }
-        [field: SerializeField] internal int ClutterInstanceCapacity { get; set; }
-        [field: SerializeField] internal int GrassInstanceCapacity { get; set; }
+        [field: SerializeField] internal int DetailInstanceCapacity { get; set; }
 
         [field: SerializeField, EnumIndexedArray(typeof(GroundMeshPiece))]
         internal Mesh[] GroundMeshes { get; private set; }
 
         [field: SerializeField] internal TreePrototype[] TreePrototypes { get; private set; }
-        [field: SerializeField] internal ClutterPrototype[] ClutterPrototypes { get; private set; }
-        [field: SerializeField] internal GrassPrototype[] GrassPrototypes { get; private set; }
+        [field: SerializeField] internal DetailPrototype[] DetailPrototypes { get; private set; }
 
         protected FunctionPointer<GetHeightDelegate> getHeight;
         protected FunctionPointer<GetNormalDelegate> getNormal;
+        private Task loadTreeInstancesTask;
         private NativeArray<int> treeIndices;
-        private NativeList<byte2> treePositions;
-        private JobHandle generateTreePositions;
+        private NativeArray<TreeInstance> treeInstances;
+        private int2 treeMinParcel;
+        private int2 treeMaxParcel;
+        private NativeArray<TreePrototypeData> treePrototypes;
 
-        // To detect and automatically regenerate tree positions when these change.
-        [NonSerialized] private RectInt oldBounds;
-        [NonSerialized] private float oldTreeSpacing;
+        private const int TERRAIN_SIZE_LIMIT = 512;
+        private const int TREE_INSTANCE_LIMIT = 262144; // 2 ^ 18
 
         private void OnValidate()
         {
-            ClutterInstanceCapacity = max(ClutterInstanceCapacity, 1);
-            GrassInstanceCapacity = max(GrassInstanceCapacity, 1);
+            RectInt bounds = Bounds;
+            bounds.width = clamp(bounds.width, 0, TERRAIN_SIZE_LIMIT);
+            bounds.height = clamp(bounds.height, 0, TERRAIN_SIZE_LIMIT);
+            Bounds = bounds;
+
+            DetailInstanceCapacity = max(DetailInstanceCapacity, 1);
             GroundInstanceCapacity = max(GroundInstanceCapacity, 1);
             ParcelSize = max(ParcelSize, 1);
             RandomSeed = max(RandomSeed, 1u);
             TreeInstanceCapacity = max(TreeInstanceCapacity, 1);
-            TreeSpacing = max(TreeSpacing, 1f);
+            treePrototypes.Dispose();
         }
 
         protected abstract void CompileNoiseFunctions();
 
-        /// <remarks>Awaiting this method is optional.</remarks>
-        public async Awaitable GenerateTreePositions()
+        public void LoadTreeInstances()
         {
-            oldBounds = Bounds;
-            oldTreeSpacing = TreeSpacing;
+            string path = $"{Application.streamingAssetsPath}/TreeInstances.bin";
+            BinaryReader reader = null;
 
-            if (treeIndices.IsCreated)
-                treeIndices.Dispose();
-
-            if (treePositions.IsCreated)
-                treePositions.Dispose();
-
-            if (Bounds.width * Bounds.height <= 0)
+            try
             {
-                treeIndices = new NativeArray<int>(0, Allocator.Persistent);
-                treePositions = new NativeList<byte2>(0, Allocator.Persistent);
-                return;
+                reader = new BinaryReader(
+                    new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read),
+                    new UTF8Encoding(false), false);
+
+                treeMinParcel.x = reader.ReadInt32();
+                treeMinParcel.y = reader.ReadInt32();
+                treeMaxParcel.x = reader.ReadInt32();
+                treeMaxParcel.y = reader.ReadInt32();
+                int2 treeIndexSize = treeMaxParcel - treeMinParcel;
+
+                if (any(treeIndexSize > TERRAIN_SIZE_LIMIT))
+                    throw new IOException(
+                        $"Tree index size of ({treeIndexSize.x}, {treeIndexSize.y}) exceeds the limit of {TERRAIN_SIZE_LIMIT}");
+
+                treeIndices = new NativeArray<int>(treeIndexSize.x * treeIndexSize.y,
+                    Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+
+                unsafe
+                {
+                    var treeIndicesBytes = new Span<byte>(treeIndices.GetUnsafePtr(),
+                        treeIndices.Length * sizeof(int));
+
+                    while (treeIndicesBytes.Length > 0)
+                    {
+                        int read = reader.Read(treeIndicesBytes);
+                        treeIndicesBytes = treeIndicesBytes.Slice(read);
+                    }
+                }
+
+                int treeInstanceCount = reader.ReadInt32();
+
+                if (treeInstanceCount > TREE_INSTANCE_LIMIT)
+                    throw new IOException(
+                        $"Tree instance count of {treeInstanceCount} exceeds the limit of {TREE_INSTANCE_LIMIT}");
+
+                treeInstances = new NativeArray<TreeInstance>(treeInstanceCount, Allocator.Persistent,
+                    NativeArrayOptions.UninitializedMemory);
+
+                unsafe
+                {
+                    var treeInstancesSpan = new Span<byte>(treeInstances.GetUnsafePtr(),
+                        treeInstances.Length * sizeof(TreeInstance));
+
+                    while (treeInstancesSpan.Length > 0)
+                    {
+                        int read = reader.Read(treeInstancesSpan);
+                        treeInstancesSpan = treeInstancesSpan.Slice(read);
+                    }
+                }
             }
-
-            var blueNoiseJob = new BlueNoise2D((Bounds.size * ParcelSize).ToFloat2(),
-                TreeSpacing * 0.5f, (Bounds.position * -ParcelSize).ToFloat2(), new Random(RandomSeed));
-
-            JobHandle blueNoise = blueNoiseJob.Schedule();
-            this.generateTreePositions.Complete();
-
-            treeIndices = new NativeArray<int>(Bounds.width * Bounds.height, Allocator.Persistent,
-                NativeArrayOptions.UninitializedMemory);
-
-            treePositions = new NativeList<byte2>(Allocator.Persistent);
-
-            var generateTreePositionsJob = new GenerateTreePositionsJob()
+            catch (Exception ex)
             {
-                grid = blueNoiseJob.Grid,
-                points = blueNoiseJob.Points,
-                gridSize = blueNoiseJob.GridSize,
-                boundsSize = Bounds.size.ToInt2(),
-                parcelSize = ParcelSize,
-                treeIndices = treeIndices,
-                treePositions = treePositions
-            };
+                if (ex is not FileNotFoundException)
+                    LogHandler.LogException(ex, this);
 
-            // Each invocation of this method must only ever await the job handle it created and not
-            // whatever latest job handle is stored in the member field, hence the code gymnastics.
-            JobHandle generateTreePositions = generateTreePositionsJob.Schedule(blueNoise);
-            this.generateTreePositions = generateTreePositions;
+                if (treeIndices.IsCreated)
+                    treeIndices.Dispose();
 
-            JobHandle.ScheduleBatchedJobs();
+                if (treeInstances.IsCreated)
+                    treeInstances.Dispose();
 
-            while (!generateTreePositions.IsCompleted)
-                await Awaitable.NextFrameAsync();
+                treeIndices = new NativeArray<int>(0, Allocator.Persistent);
+                treeInstances = new NativeArray<TreeInstance>(0, Allocator.Persistent);
+            }
+            finally
+            {
+                if (reader != null)
+                    reader.Dispose();
+            }
+        }
 
-            generateTreePositions.Complete();
-            blueNoiseJob.Dispose();
+        public Task LoadTreeInstancesAsync()
+        {
+            loadTreeInstancesTask = Task.Run(LoadTreeInstances);
+            return loadTreeInstancesTask;
         }
 
         internal TerrainDataData GetData()
         {
-            if (!treePositions.IsCreated || oldBounds != Bounds || oldTreeSpacing != TreeSpacing)
-                GenerateTreePositions();
+            if (!treePrototypes.IsCreated)
+            {
+                treePrototypes = new NativeArray<TreePrototypeData>(TreePrototypes.Length,
+                    Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+
+                for (int i = 0; i < TreePrototypes.Length; i++)
+                    treePrototypes[i] = new TreePrototypeData(TreePrototypes[i]);
+            }
+
+            if (loadTreeInstancesTask == null)
+            {
+                LoadTreeInstances();
+                loadTreeInstancesTask = Task.CompletedTask;
+            }
+            else
+            {
+                loadTreeInstancesTask.Wait();
+            }
 
             if (!getHeight.IsCreated)
                 CompileNoiseFunctions();
 
-            generateTreePositions.Complete();
-
             return new TerrainDataData(RandomSeed, ParcelSize, Bounds, MaxHeight, OccupancyMap,
-                TreeDensity, TreePrototypes, treeIndices, treePositions.AsArray(), ClutterPrototypes,
-                getHeight, getNormal);
-        }
-
-        [BurstCompile]
-        private struct GenerateTreePositionsJob : IJob
-        {
-            public NativeArray<int> grid;
-            public NativeList<float2> points;
-            public int2 gridSize;
-            public int2 boundsSize;
-            public int parcelSize;
-            [WriteOnly] public NativeArray<int> treeIndices;
-            public NativeList<byte2> treePositions;
-
-            public void Execute()
-            {
-                // We loop over parcels. For each parcel, we find the point grid rectangle that contains
-                // it. We loop through those grid cells and add any points that are inside the parcel to
-                // the parcel's list segment of points.
-
-                float metersToNorm = 255f / parcelSize;
-                float2 parcelToGrid = (float2)gridSize / boundsSize;
-
-                for (int z = 0; z < boundsSize.y; z++)
-                for (int x = 0; x < boundsSize.x; x++)
-                {
-                    treeIndices[z * boundsSize.x + x] = treePositions.Length;
-                    int2 min = (int2)floor(float2(x, z) * parcelToGrid);
-                    int2 max = min + (int2)ceil(parcelToGrid);
-                    float2 parcelOrigin = int2(x, z) * parcelSize;
-
-                    for (int j = min.y; j < max.y; j++)
-                    for (int i = min.x; i < max.x; i++)
-                    {
-                        int index = grid[j * gridSize.x + i];
-
-                        if (index < 0)
-                            continue;
-
-                        float2 localPosition = points[index] - parcelOrigin;
-
-                        if (any(localPosition < 0f) || any(localPosition >= parcelSize))
-                            continue;
-
-                        treePositions.Add((byte2)round(localPosition * metersToNorm));
-                    }
-                }
-            }
+                treePrototypes, treeIndices, treeInstances, getHeight, getNormal, treeMinParcel,
+                treeMaxParcel);
         }
 
         private enum GroundMeshPiece : int
@@ -190,34 +192,36 @@ namespace Decentraland.Terrain
         public readonly float maxHeight;
         [ReadOnly] private readonly NativeArray<byte> occupancyMap;
         private readonly int occupancyMapSize;
-        private readonly float treeDensity;
-        [ReadOnly, DeallocateOnJobCompletion] private readonly NativeArray<TreePrototypeData> treePrototypes;
+        [ReadOnly] private readonly NativeArray<TreePrototypeData> treePrototypes;
         [ReadOnly] private readonly NativeArray<int> treeIndices;
-        [ReadOnly] private readonly NativeArray<byte2> treePositions;
-        [ReadOnly, DeallocateOnJobCompletion] private readonly NativeArray<ClutterPrototypeData> clutterPrototypes;
+        [ReadOnly] private readonly NativeArray<TreeInstance> treeInstances;
         private readonly FunctionPointer<GetHeightDelegate> getHeight;
         private readonly FunctionPointer<GetNormalDelegate> getNormal;
+        private readonly int2 treeMinParcel;
+        private readonly int2 treeMaxParcel;
 
         /// <summary>xy = min, zw = max, size = max - min</summary>
-        public readonly int4 bounds;
+        private readonly int4 bounds;
 
         private static NativeArray<byte> emptyOccupancyMap;
 
         public TerrainDataData(uint randomSeed, int parcelSize, RectInt bounds, float maxHeight,
-            Texture2D occupancyMap, float treeDensity, TreePrototype[] treePrototypes,
-            NativeArray<int> treeIndices, NativeArray<byte2> treePositions,
-            ClutterPrototype[] clutterPrototypes, FunctionPointer<GetHeightDelegate> getHeight,
-            FunctionPointer<GetNormalDelegate> getNormal)
+            Texture2D occupancyMap, NativeArray<TreePrototypeData> treePrototypes,
+            NativeArray<int> treeIndices, NativeArray<TreeInstance> treeInstances,
+            FunctionPointer<GetHeightDelegate> getHeight, FunctionPointer<GetNormalDelegate> getNormal,
+            int2 treeMinParcel, int2 treeMaxParcel)
         {
             this.randomSeed = randomSeed;
             this.parcelSize = parcelSize;
             this.bounds = int4(bounds.xMin, bounds.yMin, bounds.xMax, bounds.yMax);
             this.maxHeight = maxHeight;
-            this.treeDensity = treeDensity;
+            this.treePrototypes = treePrototypes;
             this.treeIndices = treeIndices;
-            this.treePositions = treePositions;
+            this.treeInstances = treeInstances;
             this.getHeight = getHeight;
             this.getNormal = getNormal;
+            this.treeMinParcel = treeMinParcel;
+            this.treeMaxParcel = treeMaxParcel;
 
             if (IsPowerOfTwo(occupancyMap, out occupancyMapSize))
             {
@@ -231,18 +235,6 @@ namespace Decentraland.Terrain
 
                 this.occupancyMap = emptyOccupancyMap;
             }
-
-            this.treePrototypes = new NativeArray<TreePrototypeData>(treePrototypes.Length,
-                Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-
-            for (int i = 0; i < treePrototypes.Length; i++)
-                this.treePrototypes[i] = new TreePrototypeData(treePrototypes[i]);
-
-            this.clutterPrototypes = new NativeArray<ClutterPrototypeData>(clutterPrototypes.Length,
-                Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-
-            for (int i = 0; i < clutterPrototypes.Length; i++)
-                this.clutterPrototypes[i] = new ClutterPrototypeData(clutterPrototypes[i]);
         }
 
         public bool BoundsOverlaps(int4 bounds) =>
@@ -329,12 +321,18 @@ namespace Decentraland.Terrain
             return new Random(seed != 0 ? seed : 0x6487ed51);
         }
 
-        public ReadOnlySpan<byte2> GetTreePositions(int2 parcel)
+        public ReadOnlySpan<TreeInstance> GetTreeInstances(int2 parcel)
         {
-            int index = (parcel.y - bounds.y) * (bounds.z - bounds.x) + parcel.x - bounds.x;
+            if (parcel.x < treeMinParcel.x || parcel.x >= treeMaxParcel.x
+                || parcel.y < treeMinParcel.y || parcel.y >= treeMaxParcel.y)
+            {
+                return ReadOnlySpan<TreeInstance>.Empty;
+            }
+
+            int index = (parcel.y - treeMinParcel.y) * (treeMaxParcel.x - treeMinParcel.x) + parcel.x - treeMinParcel.x;
             int start = treeIndices[index++];
-            int end = index < treeIndices.Length ? treeIndices[index] : treePositions.Length;
-            return treePositions.AsReadOnlySpan().Slice(start, end - start);
+            int end = index < treeIndices.Length ? treeIndices[index] : treeInstances.Length;
+            return treeInstances.AsReadOnlySpan().Slice(start, end - start);
         }
 
         private static bool IsPowerOfTwo(Texture2D texture, out int size)
@@ -467,70 +465,26 @@ namespace Decentraland.Terrain
             return lerp(top, bottom, t.y) * (1f / 255f);
         }
 
-        public bool TryGenerateClutter(int2 parcel, float2 positionXZ, ref Random random,
-            out int prototypeIndex, out float rotationY, out float scale)
+        public bool TryGenerateTree(int2 parcel, TreeInstance instance, out float3 position,
+            out float rotationY, out float scaleXZ, out float scaleY)
         {
+            position.x = instance.positionX * parcelSize * (1f / 255f);
+            position.y = 0f;
+            position.z = instance.positionZ * parcelSize * (1f / 255f);
             rotationY = 0f;
+            scaleXZ = 0f;
+            scaleY = 0f;
+            TreePrototypeData prototype = treePrototypes[instance.prototypeIndex];
 
-            prototypeIndex = random.NextInt(clutterPrototypes.Length);
-            ClutterPrototypeData prototype = clutterPrototypes[prototypeIndex];
-            scale = random.NextFloat(prototype.minScale, prototype.maxScale);
-            float radius = prototype.radius * scale;
-
-            if (OverlapsOccupiedParcel(parcel, positionXZ - parcel * parcelSize, radius))
-                return false;
-
-            rotationY = random.NextFloat(-180f, 180f);
-            return true;
-        }
-
-        public bool TryGenerateTree(int2 parcel, byte2 localPosition, ref Random random,
-            out int prototypeIndex, out float3 position, out float rotationY)
-        {
-            prototypeIndex = -1;
-            position = default;
-            rotationY = 0f;
-
-            if (random.NextFloat() > treeDensity)
-                return false;
-
-            prototypeIndex = random.NextInt(treePrototypes.Length);
-            position.xz = localPosition * (parcelSize * (1f / 255f));
-            float canopyRadius = treePrototypes[prototypeIndex].canopyRadius;
-
-            if (OverlapsOccupiedParcel(parcel, position.xz, canopyRadius))
-                return false;
+            /*if (OverlapsOccupiedParcel(parcel, position.xz, prototype.radius))
+                return false;*/
 
             position.xz += parcel * parcelSize;
-            position.y = GetHeight(position.x, position.z);
-            rotationY = random.NextFloat(-180f, 180f);
+            position.y = instance.positionY * (1f / 256f);
+            rotationY = instance.rotationY * (360f / 255f);
+            scaleXZ = prototype.minScaleXZ + instance.scaleXZ * prototype.scaleSizeXZ;
+            scaleY = prototype.minScaleY + instance.scaleY * prototype.scaleSizeY;
             return true;
-        }
-
-        private readonly struct ClutterPrototypeData
-        {
-            public readonly float radius;
-            public readonly float minScale;
-            public readonly float maxScale;
-
-            public ClutterPrototypeData(ClutterPrototype prototype)
-            {
-                radius = prototype.Radius;
-                minScale = prototype.MinScale;
-                maxScale = prototype.MaxScale;
-            }
-        }
-
-        private readonly struct TreePrototypeData
-        {
-            public readonly float canopyRadius;
-            public readonly float trunkRadius;
-
-            public TreePrototypeData(TreePrototype prototype)
-            {
-                canopyRadius = prototype.CanopyRadius;
-                trunkRadius = prototype.TrunkRadius;
-            }
         }
     }
 
@@ -539,27 +493,7 @@ namespace Decentraland.Terrain
     public delegate void GetNormalDelegate(float x, float z, out float3 normal);
 
     [Serializable]
-    internal struct ClutterLOD
-    {
-        [field: SerializeField] public Mesh Mesh { get; set; }
-        [field: SerializeField] public float MinScreenSize { get; set; }
-        [field: SerializeField] public Material[] Materials { get; set; }
-    }
-
-    [Serializable]
-    internal struct ClutterPrototype
-    {
-        [field: SerializeField] public GameObject Source { get; private set; }
-        [field: SerializeField] public GameObject Collider { get; set; }
-        [field: SerializeField] public float LocalSize { get; set; }
-        [field: SerializeField] public float Radius { get; private set; }
-        [field: SerializeField] public float MinScale { get; private set; }
-        [field: SerializeField] public float MaxScale { get; private set; }
-        [field: SerializeField] public ClutterLOD[] Lods { get; set; }
-    }
-
-    [Serializable]
-    internal struct GrassPrototype
+    internal struct DetailPrototype
     {
         [field: SerializeField] public GameObject Source { get; private set; }
         [field: SerializeField] public float Density { get; private set; }
@@ -571,6 +505,35 @@ namespace Decentraland.Terrain
         [field: SerializeField] public Material Material { get; set; }
     }
 
+    internal readonly struct TreeInstance
+    {
+        public readonly byte prototypeIndex;
+        public readonly byte positionX;
+        public readonly short positionY;
+        public readonly byte positionZ;
+        public readonly byte rotationY;
+        public readonly byte scaleXZ;
+        public readonly byte scaleY;
+
+        public TreeInstance(UnityEngine.TreeInstance instance, Vector3 position,
+            int parcelSize, TreePrototype[] prototypes)
+        {
+            float2 fracPos = frac(position.XZ() / parcelSize);
+            prototypeIndex = (byte)instance.prototypeIndex;
+            positionX = (byte)round(fracPos.x * 255f);
+            positionY = (short)round(position.y * 256f);
+            positionZ = (byte)round(fracPos.y * 255f);
+            rotationY = (byte)round(instance.rotation * (255f / PI2));
+            TreePrototype prototype = prototypes[prototypeIndex];
+
+            scaleXZ = (byte)round((instance.widthScale - prototype.MinScaleXZ)
+                / (prototype.MaxScaleXZ - prototype.MaxScaleXZ) * 255f);
+
+            scaleY = (byte)round((instance.heightScale - prototype.MinScaleY)
+                / (prototype.MaxScaleY - prototype.MaxScaleY) * 255f);
+        }
+    }
+
     [Serializable]
     internal struct TreeLOD
     {
@@ -580,13 +543,34 @@ namespace Decentraland.Terrain
     }
 
     [Serializable]
-    internal struct TreePrototype
+    public struct TreePrototype
     {
-        [field: SerializeField] public GameObject Source { get; private set; }
-        [field: SerializeField] public GameObject Collider { get; set; }
-        [field: SerializeField] public float LocalSize { get; set; }
-        [field: SerializeField] public float CanopyRadius { get; private set; }
-        [field: SerializeField] public float TrunkRadius { get; private set; }
-        [field: SerializeField] public TreeLOD[] Lods { get; set; }
+        [field: SerializeField] internal GameObject Source { get; private set; }
+        [field: SerializeField] internal GameObject Collider { get; set; }
+        [field: SerializeField] internal float LocalSize { get; set; }
+        [field: SerializeField] public float MinScaleXZ { get; set; }
+        [field: SerializeField] public float MaxScaleXZ { get; set; }
+        [field: SerializeField] public float MinScaleY { get; set; }
+        [field: SerializeField] public float MaxScaleY { get; set; }
+        [field: SerializeField] internal float Radius { get; set; }
+        [field: SerializeField] internal TreeLOD[] Lods { get; set; }
+    }
+
+    internal readonly struct TreePrototypeData
+    {
+        public readonly float minScaleXZ;
+        public readonly float scaleSizeXZ;
+        public readonly float minScaleY;
+        public readonly float scaleSizeY;
+        public readonly float radius;
+
+        public TreePrototypeData(TreePrototype prototype)
+        {
+            minScaleXZ = prototype.MinScaleXZ;
+            scaleSizeXZ = prototype.MaxScaleXZ - minScaleXZ;
+            minScaleY = prototype.MinScaleY;
+            scaleSizeY = prototype.MaxScaleY - minScaleY;
+            radius = prototype.Radius;
+        }
     }
 }
