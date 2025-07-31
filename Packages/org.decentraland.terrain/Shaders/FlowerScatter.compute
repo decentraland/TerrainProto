@@ -55,8 +55,8 @@ void FlowerScatter(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, u
     int2 gridPosition = int2((int)((localId.x * 4) % 16), (int)(localId.x / 16) * 4);
     half2 fGridPosition = gridPosition * 0.25f;
 
-    half random_X = hash_int_to_float(corner0 + gridPosition) + fGridPosition.x;
-    half random_Z = hash_int_to_float(-corner0 + gridPosition) + fGridPosition.y;
+    half random_X = (hash_int_to_float(corner0 + gridPosition) * 2.0f) + fGridPosition.x;
+    half random_Z = (hash_int_to_float(-corner0 + gridPosition) * 2.0f) + fGridPosition.y;
 
     float2 worldSpaceCoord = corner0 + float2(random_X, random_Z);
     float2 UV_coords = (worldSpaceCoord + 4096.0f) / 8192.0f;

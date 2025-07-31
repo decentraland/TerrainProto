@@ -72,7 +72,7 @@ void CatTailScatter(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, 
         GroundDetailTexture, samplerGroundDetailTexture,
         SandDetailTexture, samplerSandDetailTexture, 2);
 
-    if (terrainColour.g > 0.05f)
+    if (terrainColour.g > 0.15f)
     {
         uint original_out;
         InterlockedAdd(foundCount, 1, original_out);
