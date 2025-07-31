@@ -61,18 +61,22 @@ namespace Decentraland.Terrain
         private Material flower1Material;
         private Mesh flower2Mesh;
         private Material flower2Material;
+        private Bounds indirectRenderingBounds;
 
         public static uint CreateDepth8CornerIndexStart(byte depth, uint cornerIndexStart)
         {
             return ((uint)depth << 24) | cornerIndexStart;
         }
 
-        public void Initialize()
+        public void Initialize(TerrainData terrainData)
         {
             if (initialized)
                 return;
 
             initialized = true;
+            indirectRenderingBounds = new Bounds(new Vector3(0, 2, 0),
+                new Vector3(terrainData.Bounds.width * 16.0f, 4,
+                    terrainData.Bounds.height * 16.0f));
             GenerateQuadTree();
             SetupComputeBuffers();
         }
@@ -82,7 +86,7 @@ namespace Decentraland.Terrain
             if (terrainData.DetailPrototypes.Length == 0)
                 return;
 
-            Initialize();
+            Initialize(terrainData);
 
             RunFrustumCulling(terrainData, camera);
             GenerateScatteredGrass(terrainData);
@@ -453,7 +457,7 @@ namespace Decentraland.Terrain
                 layer = 1, // Default
                 receiveShadows = true,
                 renderingLayerMask = RenderingLayerMask.defaultRenderingLayerMask,
-                worldBounds = new Bounds(Vector3.zero, new Vector3(4096, 16, 4096)),
+                worldBounds = indirectRenderingBounds,
                 shadowCastingMode = ShadowCastingMode.Off,
             };
 
@@ -480,7 +484,7 @@ namespace Decentraland.Terrain
                 layer = 1, // Default
                 receiveShadows = true,
                 renderingLayerMask = RenderingLayerMask.defaultRenderingLayerMask,
-                worldBounds = new Bounds(Vector3.zero, new Vector3(4096, 16, 4096)),
+                worldBounds = indirectRenderingBounds,
                 shadowCastingMode = ShadowCastingMode.Off,
             };
 
