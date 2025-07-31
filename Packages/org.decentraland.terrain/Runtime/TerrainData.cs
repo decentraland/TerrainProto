@@ -482,7 +482,7 @@ namespace Decentraland.Terrain
                 return false;*/
 
             position.xz += parcel * parcelSize;
-            position.y = instance.positionY * (1f / 256f);
+            position.y = GetHeight(position.x, position.z); // instance.positionY * (1f / 256f);
             rotationY = instance.rotationY * (360f / 255f);
             scaleXZ = prototype.minScaleXZ + instance.scaleXZ * prototype.scaleSizeXZ;
             scaleY = prototype.minScaleY + instance.scaleY * prototype.scaleSizeY;
