@@ -27,6 +27,9 @@ MonoBehaviour:
   <RenderTreesAndDetail>k__BackingField: 1
   <GroundInstanceCapacity>k__BackingField: 80
   <TreeInstanceCapacity>k__BackingField: 3000
+  <ClutterInstanceCapacity>k__BackingField: 1
+  <GrassInstanceCapacity>k__BackingField: 1
+  <FlowerInstanceCapacity>k__BackingField: 1
   <DetailInstanceCapacity>k__BackingField: 40000
   <GroundMeshes>k__BackingField:
   - {fileID: 1394718660543912083, guid: 6af6e9dc2ce313b49a66e31153e30023, type: 3}
@@ -236,6 +239,16 @@ MonoBehaviour:
       <MinScreenSize>k__BackingField: 0.021002172
       <Materials>k__BackingField:
       - {fileID: 2100000, guid: afb6f42b6f5b7834b96f692291021293, type: 2}
+  <GrassPrototypes>k__BackingField:
+  - <Source>k__BackingField: {fileID: 0}
+    <Density>k__BackingField: 0
+    <MinScaleXZ>k__BackingField: 0
+    <MaxScaleXZ>k__BackingField: 0
+    <MinScaleY>k__BackingField: 0
+    <MaxScaleY>k__BackingField: 0
+    <Mesh>k__BackingField: {fileID: 0}
+    <Material>k__BackingField: {fileID: 0}
+  <FlowerPrototypes>k__BackingField: []
   <DetailPrototypes>k__BackingField:
   - <Source>k__BackingField: {fileID: 1333259486307050118, guid: 7326c89d1e84ecb429de2f08a2baf2fe, type: 3}
     <Density>k__BackingField: 1

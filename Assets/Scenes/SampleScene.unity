@@ -150,7 +150,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   <TerrainData>k__BackingField: {fileID: 11400000, guid: cbbf13f888dcb764f90a05c667d07000, type: 2}
-  <GrassIndirectRenderer>k__BackingField: {fileID: 0}
+  <GrassIndirectRenderer>k__BackingField: {fileID: 11400000, guid: a90e2760be5889042a8cbd9419f88649, type: 2}
 --- !u!4 &248761157
 Transform:
   m_ObjectHideFlags: 0
