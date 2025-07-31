@@ -74,9 +74,9 @@ namespace Decentraland.Terrain
                 return;
 
             initialized = true;
-            indirectRenderingBounds = new Bounds(new Vector3(0, 2, 0),
-                new Vector3(terrainData.Bounds.width * 16.0f, 4,
-                    terrainData.Bounds.height * 16.0f));
+            indirectRenderingBounds.SetMinMax(
+                new Vector3(terrainData.Bounds.xMin * terrainData.ParcelSize, 0f, terrainData.Bounds.yMin * terrainData.ParcelSize),
+                new Vector3(terrainData.Bounds.xMax * terrainData.ParcelSize, terrainData.MaxHeight, terrainData.Bounds.yMax * terrainData.ParcelSize));
             GenerateQuadTree();
             SetupComputeBuffers();
         }
