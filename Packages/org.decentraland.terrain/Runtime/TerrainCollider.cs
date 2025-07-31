@@ -290,11 +290,15 @@ namespace Decentraland.Terrain
                 }
 
                 Terrain.TreeInstance instance = instances[i];
+                PrefabInstancePool pool = state.treePools[instance.prototypeIndex];
+
+                if (pool == null)
+                    continue;
 
                 var tree = new TreeInstance()
                 {
                     prototypeIndex = instance.prototypeIndex,
-                    gameObject = state.treePools[instance.prototypeIndex].Get()
+                    gameObject = pool.Get()
                 };
 
                 var t = tree.gameObject.transform;
@@ -398,13 +402,23 @@ namespace Decentraland.Terrain
             treePools = new PrefabInstancePool[terrainData.TreePrototypes.Length];
 
             for (int i = 0; i < treePools.Length; i++)
-                treePools[i] = new PrefabInstancePool(terrainData.TreePrototypes[i].Collider, parent);
+            {
+                GameObject collider = terrainData.TreePrototypes[i].Collider;
+
+                if (collider != null)
+                    treePools[i] = new PrefabInstancePool(collider, parent);
+            }
         }
 
         public void Dispose()
         {
             for (int i = 0; i < treePools.Length; i++)
-                treePools[i].Dispose();
+            {
+                PrefabInstancePool pool = treePools[i];
+
+                if (pool != null)
+                    treePools[i].Dispose();
+            }
         }
     }
 }

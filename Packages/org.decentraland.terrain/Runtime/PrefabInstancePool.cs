@@ -10,7 +10,7 @@ namespace Decentraland.Terrain
     /// preserved when reloading scripts during play mode.
     /// </remarks>
     [Serializable]
-    public struct PrefabInstancePool : IDisposable
+    public sealed class PrefabInstancePool : IDisposable
     {
         private List<GameObject> instances;
         private GameObject prefab;
@@ -29,7 +29,7 @@ namespace Decentraland.Terrain
 #endif
         }
 
-        public readonly void Dispose()
+        public void Dispose()
         {
             for (int i = 0; i < instances.Count; i++)
             {
@@ -40,7 +40,7 @@ namespace Decentraland.Terrain
             }
         }
 
-        public readonly GameObject Get()
+        public GameObject Get()
         {
             GameObject item;
 
@@ -64,7 +64,7 @@ namespace Decentraland.Terrain
             return item;
         }
 
-        public readonly void Release(GameObject item)
+        public void Release(GameObject item)
         {
             instances.Add(item);
         }
