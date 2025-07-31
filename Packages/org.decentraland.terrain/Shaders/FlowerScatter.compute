@@ -1,8 +1,8 @@
-#pragma enable_d3d11_debug_symbols
+﻿#pragma enable_d3d11_debug_symbols
 
 #include "ScatterFunctions.cginc"
 
-#pragma kernel ScatterGrass
+#pragma kernel FlowerScatter
 
 struct PerInst
 {
@@ -14,8 +14,13 @@ struct PerInst
 cbuffer ConstBuffer : register(b0)
 {
     float4 TerrainBounds;
+    int2 HeightTextureSize;
+    int2 OccupancyTextureSize;
+    int2 TerrainBlendTextureSize;
+    int2 GroundDetailTextureSize;
+    int2 SandDetailTextureSize;
     float TerrainHeight;
-    uint parcelSize;
+    int parcelSize;
 }
 
 Texture2D<float4> HeightMapTexture : register(t0);
@@ -34,31 +39,51 @@ SamplerState TerrainBlendPointRepeatSampler : register(s4);
 SamplerState samplerGroundDetailTexture : register(s5);
 SamplerState samplerSandDetailTexture : register(s6);
 
-RWStructuredBuffer<PerInst> grassInstances : register(u0);
+shared RWStructuredBuffer<uint> arrInstCount : register(u0);
+RWStructuredBuffer<PerInst> flower0Instances : register(u1);
+RWStructuredBuffer<PerInst> flower1Instances : register(u2);
+RWStructuredBuffer<PerInst> flower2Instances : register(u3);
 
-[numthreads(256, 1, 1)]
-void ScatterGrass(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint3 localId : SV_GroupThreadID)
+[numthreads(64, 1, 1)]
+void FlowerScatter(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint3 localId : SV_GroupThreadID)
 {
     if (groupId.x >= visibleParcelCount[0])
         return;
 
-    PerInst perInst;
-
     int2 corner0 = (int2)(visibleParcels[groupId.x] * 16.0f);
-    int2 gridPosition = int2((int)(localId.x % 16), (int)(localId.x / 16));
+    half2 parcelGroupingArea = half2(hash_int_to_float(corner0), hash_int_to_float(-corner0));
+    int2 gridPosition = int2((int)((localId.x * 4) % 16), (int)(localId.x / 16) * 4);
+    half2 fGridPosition = gridPosition * 0.25f;
 
-    half random_X = hash_int_to_float(corner0 + gridPosition) + gridPosition.x;
-    half random_Z = hash_int_to_float(-corner0 + gridPosition) + gridPosition.y;
+    half random_X = hash_int_to_float(corner0 + gridPosition) + fGridPosition.x;
+    half random_Z = hash_int_to_float(-corner0 + gridPosition) + fGridPosition.y;
+
     float2 worldSpaceCoord = corner0 + float2(random_X, random_Z);
     float2 UV_coords = (worldSpaceCoord + 4096.0f) / 8192.0f;
 
+    // Check occupancy
     float fOccupancy = GetOccupancy(UV_coords, TerrainBounds, parcelSize, OccupancyTexture, samplerOccupancyTexture);
+
+    // Get Height
     float height = CalculateHeightFromHeightmap(UV_coords, TerrainHeight, fOccupancy, HeightMapTexture, HeightMapTexturePointClampSampler);
+
+    // Check the texture
+    half4 terrainColour = SplatmapMix(UV_coords * 8.0f, TerrainBlendTexture, samplerTerrainBlendTexture,
+        GroundDetailTexture, samplerGroundDetailTexture,
+        SandDetailTexture, samplerSandDetailTexture);
+
+    PerInst perInst;
     float fScale = 1.0f + hash_int_to_float(corner0 + gridPosition);
     perInst.position = float4(random_X, height, random_Z, fScale);
 
     float3 normalWS = CalculateNormalFromHeightmap(UV_coords, TerrainHeight, fOccupancy, HeightMapTexture, samplerHeightMapTexture);
     perInst.quatRotation = CreateGrassRotationQuaternion(normalWS, hash_int_to_float(corner0 + gridPosition) * 2.0f);
-    perInst.colour = SplatmapMix(UV_coords * 8.0f, TerrainBlendTexture, samplerTerrainBlendTexture, GroundDetailTexture, samplerGroundDetailTexture, SandDetailTexture, samplerSandDetailTexture);
-    grassInstances[id.x] = perInst;
+    perInst.colour = float4(1.0, 1.0, 1.0, 1.0);
+
+    uint original_out;
+    InterlockedAdd(arrInstCount[0], 1, original_out);
+    InterlockedAdd(arrInstCount[1], 1, original_out);
+    flower0Instances[id.x] = perInst;
+    perInst.position.xyz += float3(parcelGroupingArea.x, 0.0f,parcelGroupingArea.y);
+    flower1Instances[id.x] = perInst;
 }

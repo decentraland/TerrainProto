@@ -27,12 +27,18 @@ namespace Decentraland.Terrain
         [field: SerializeField] public bool RenderTreesAndDetail { get; set; } = true;
         [field: SerializeField] internal int GroundInstanceCapacity { get; set; }
         [field: SerializeField] internal int TreeInstanceCapacity { get; set; }
+        [field: SerializeField] internal int ClutterInstanceCapacity { get; set; }
+        [field: SerializeField] internal int GrassInstanceCapacity { get; set; }
+        [field: SerializeField] internal int FlowerInstanceCapacity { get; set; }
         [field: SerializeField] internal int DetailInstanceCapacity { get; set; }
 
         [field: SerializeField, EnumIndexedArray(typeof(GroundMeshPiece))]
         internal Mesh[] GroundMeshes { get; private set; }
 
         [field: SerializeField] internal TreePrototype[] TreePrototypes { get; private set; }
+        [field: SerializeField] internal ClutterPrototype[] ClutterPrototypes { get; private set; }
+        [field: SerializeField] internal GrassPrototype[] GrassPrototypes { get; private set; }
+        [field: SerializeField] internal FlowerPrototype[] FlowerPrototypes { get; private set; }
         [field: SerializeField] internal DetailPrototype[] DetailPrototypes { get; private set; }
 
         protected FunctionPointer<GetHeightDelegate> getHeight;
@@ -49,6 +55,9 @@ namespace Decentraland.Terrain
 
         private void OnValidate()
         {
+            ClutterInstanceCapacity = max(ClutterInstanceCapacity, 1);
+            GrassInstanceCapacity = max(GrassInstanceCapacity, 1);
+            FlowerInstanceCapacity = max(FlowerInstanceCapacity, 1);
             RectInt bounds = Bounds;
             bounds.width = clamp(bounds.width, 0, TERRAIN_SIZE_LIMIT);
             bounds.height = clamp(bounds.height, 0, TERRAIN_SIZE_LIMIT);
@@ -496,6 +505,19 @@ namespace Decentraland.Terrain
 
     [Serializable]
     internal struct DetailPrototype
+    {
+        [field: SerializeField] public GameObject Source { get; private set; }
+        [field: SerializeField] public float Density { get; private set; }
+        [field: SerializeField] public float MinScaleXZ { get; private set; }
+        [field: SerializeField] public float MaxScaleXZ { get; private set; }
+        [field: SerializeField] public float MinScaleY { get; private set; }
+        [field: SerializeField] public float MaxScaleY { get; private set; }
+        [field: SerializeField] public Mesh Mesh { get; set; }
+        [field: SerializeField] public Material Material { get; set; }
+    }
+
+    [Serializable]
+    internal struct FlowerPrototype
     {
         [field: SerializeField] public GameObject Source { get; private set; }
         [field: SerializeField] public float Density { get; private set; }

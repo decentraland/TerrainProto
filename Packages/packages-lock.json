@@ -166,7 +166,7 @@
         "com.unity.modules.particlesystem": "1.0.0",
         "com.unity.modules.wind": "1.0.0"
       },
-      "hash": "67008c6df1f21a57ff4559efdd52c631dd2a8e43"
+      "hash": "90ec7ddedf3fde00ad06075de5cfbaf3f0982987"
     },
     "org.decentraland.terrain": {
       "version": "file:org.decentraland.terrain",
