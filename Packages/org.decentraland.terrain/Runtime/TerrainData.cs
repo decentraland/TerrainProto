@@ -36,7 +36,6 @@ namespace Decentraland.Terrain
         internal Mesh[] GroundMeshes { get; private set; }
 
         [field: SerializeField] internal TreePrototype[] TreePrototypes { get; private set; }
-        [field: SerializeField] internal ClutterPrototype[] ClutterPrototypes { get; private set; }
         [field: SerializeField] internal GrassPrototype[] GrassPrototypes { get; private set; }
         [field: SerializeField] internal FlowerPrototype[] FlowerPrototypes { get; private set; }
         [field: SerializeField] internal DetailPrototype[] DetailPrototypes { get; private set; }
@@ -505,6 +504,19 @@ namespace Decentraland.Terrain
 
     [Serializable]
     internal struct DetailPrototype
+    {
+        [field: SerializeField] public GameObject Source { get; private set; }
+        [field: SerializeField] public float Density { get; private set; }
+        [field: SerializeField] public float MinScaleXZ { get; private set; }
+        [field: SerializeField] public float MaxScaleXZ { get; private set; }
+        [field: SerializeField] public float MinScaleY { get; private set; }
+        [field: SerializeField] public float MaxScaleY { get; private set; }
+        [field: SerializeField] public Mesh Mesh { get; set; }
+        [field: SerializeField] public Material Material { get; set; }
+    }
+
+    [Serializable]
+    internal struct GrassPrototype
     {
         [field: SerializeField] public GameObject Source { get; private set; }
         [field: SerializeField] public float Density { get; private set; }
