@@ -24,6 +24,12 @@ namespace Decentraland.Terrain
             }
         }
 
+        public static float3 MultiplyPoint(this float4x4 matrix, float3 point)
+        {
+            float4 temp = mul(matrix, float4(point, 1f));
+            return temp.xyz * (1f / temp.w);
+        }
+
         public static MinMaxAABB ToMinMaxAABB(this Bounds bounds) =>
             new MinMaxAABB(bounds.min, bounds.max);
 

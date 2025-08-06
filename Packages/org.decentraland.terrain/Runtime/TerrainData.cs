@@ -250,34 +250,6 @@ namespace Decentraland.Terrain
         public bool BoundsOverlaps(int4 bounds) =>
             all(this.bounds.zw >= bounds.xy & this.bounds.xy <= bounds.zw);
 
-        public void GenerateClutterPositions(int2 parcel, NativeList<float2> obstaclePositions,
-            ref Random random, NativeList<float2> clutterPositions)
-        {
-            const float minSqrDistance = 16f;
-
-            static bool CanEmitPoint(in NativeList<float2> points, in float2 point)
-            {
-                for (int i = 0; i < points.Length; i++)
-                    if (distancesq(point, points[i]) < minSqrDistance)
-                        return false;
-
-                return true;
-            }
-
-            int positionCount = min(clutterPositions.Capacity, 2);
-
-            for (int i = 0; i < positionCount; i++)
-            {
-                float2 point = random.NextFloat2(parcelSize) + parcel * parcelSize;
-
-                if (CanEmitPoint(in obstaclePositions, point))
-                {
-                    obstaclePositions.Add(point);
-                    clutterPositions.Add(point);
-                }
-            }
-        }
-
         public float GetHeight(float x, float z)
         {
             float occupancy;
@@ -312,6 +284,13 @@ namespace Decentraland.Terrain
         {
             getNormal.Invoke(x, z, out float3 normal);
             return normal;
+        }
+
+        public MinMaxAABB GetParcelBounds(int2 parcel)
+        {
+            int2 min = parcel * parcelSize;
+            int2 max = min + parcelSize;
+            return new MinMaxAABB(float3(min.x, 0f, min.y), float3(max.x, maxHeight, max.y));
         }
 
         public Random GetRandom(int2 parcel)
@@ -376,27 +355,6 @@ namespace Decentraland.Terrain
             parcel += occupancyMapSize / 2;
             int index = parcel.y * occupancyMapSize + parcel.x;
             return occupancyMap[index] > 0;
-        }
-
-        public bool OverlapsClipVolume(int2 parcel, NativeArray<ClipPlane> clipPlanes)
-        {
-            // Because parcels are small relative to the camera frustum and their size stays
-            // constant, there's no need to test against frustum bounds.
-
-            int2 min = parcel * parcelSize;
-            int2 max = min + parcelSize;
-            var bounds = new MinMaxAABB(float3(min.x, 0f, min.y), float3(max.x, maxHeight, max.y));
-
-            for (int i = 0; i < clipPlanes.Length; i++)
-            {
-                ClipPlane clipPlane = clipPlanes[i];
-                float3 farCorner = bounds.GetCorner(clipPlane.farCornerIndex);
-
-                if (clipPlane.plane.SignedDistanceToPoint(farCorner) < 0f)
-                    return false;
-            }
-
-            return true;
         }
 
         private bool OverlapsOccupiedParcel(int2 parcel, float2 localPosition, float radius)

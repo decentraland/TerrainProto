@@ -3,7 +3,6 @@ using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
-using Unity.Mathematics.Geometry;
 using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
@@ -19,14 +18,7 @@ namespace Decentraland.Terrain
         [field: SerializeField] private TerrainData TerrainData { get; set; }
         [field: SerializeField] internal GrassIndirectRenderer GrassIndirectRenderer { get; private set; }
 
-        private static readonly Vector3[] CLIP_CORNERS =
-        {
-            new(-1f, -1f, 0f), new(-1f, -1f, 1f), new(-1f, 1f, 0f), new(-1f, 1f, 1f), new(1f, -1f, 0f),
-            new(1f, -1f, 1f), new(1f, 1f, 0f), new(1f, 1f, 1f)
-        };
-
         private static MaterialPropertyBlock groundMatProps;
-        private static NativeArray<int4> magicPattern;
         private static readonly int OCCUPANCY_MAP_ID = Shader.PropertyToID("_OccupancyMap");
         private static readonly int INV_PARCEL_SIZE_ID = Shader.PropertyToID("_InvParcelSize");
         private static readonly int TERRAIN_BOUNDS_ID = Shader.PropertyToID("_TerrainBounds");
@@ -91,37 +83,6 @@ namespace Decentraland.Terrain
 
         public Bounds Bounds => TerrainData != null ? GetBounds(TerrainData) : default;
 
-        private static NativeArray<int4> CreateMagicPattern()
-        {
-            var magicPattern = new NativeArray<int4>(16, Allocator.Persistent,
-                NativeArrayOptions.UninitializedMemory);
-
-            // x and y are relative parcel coordinates, z is the mesh to use (0 is middle piece, 1 is
-            // edge piece, and 2 is corner piece), and w is the rotation around the Y axis. Ground
-            // meshes are to be placed in a 2x2 square (items 0 to 3) and then in an ever expanding
-            // concentric rings around that (items 4 to 15), doubling the parcel coordinate values after
-            // every iteration.
-
-            magicPattern[0] = int4(0, 0, 0, 0);
-            magicPattern[1] = int4(-1, 0, 0, 0);
-            magicPattern[2] = int4(-1, -1, 0, 0);
-            magicPattern[3] = int4(0, -1, 0, 0);
-            magicPattern[4] = int4(1, 1, 2, 0);
-            magicPattern[5] = int4(0, 1, 1, 0);
-            magicPattern[6] = int4(-1, 1, 1, 0);
-            magicPattern[7] = int4(-2, 1, 2, -90);
-            magicPattern[8] = int4(-2, 0, 1, -90);
-            magicPattern[9] = int4(-2, -1, 1, -90);
-            magicPattern[10] = int4(-2, -2, 2, 180);
-            magicPattern[11] = int4(-1, -2, 1, 180);
-            magicPattern[12] = int4(0, -2, 1, 180);
-            magicPattern[13] = int4(1, -2, 2, 90);
-            magicPattern[14] = int4(1, -1, 1, 90);
-            magicPattern[15] = int4(1, 0, 1, 90);
-
-            return magicPattern;
-        }
-
         private static Bounds GetBounds(TerrainData terrainData)
         {
             RectInt bounds = terrainData.Bounds;
@@ -132,24 +93,6 @@ namespace Decentraland.Terrain
 
             return new Bounds(new Vector3(center.x, maxHeight * 0.5f, center.y),
                 new Vector3(size.x, maxHeight, size.y));
-        }
-
-        private static bool OverlapsClipVolume(MinMaxAABB bounds, MinMaxAABB clipBounds,
-            NativeArray<ClipPlane> clipPlanes)
-        {
-            if (!bounds.Overlaps(clipBounds))
-                return false;
-
-            for (int i = 0; i < clipPlanes.Length; i++)
-            {
-                ClipPlane clipPlane = clipPlanes[i];
-                float3 farCorner = bounds.GetCorner(clipPlane.farCornerIndex);
-
-                if (clipPlane.plane.SignedDistanceToPoint(farCorner) < 0f)
-                    return false;
-            }
-
-            return true;
         }
 
         public static void Render(TerrainData terrainData, Camera camera, bool renderToAllCameras,
@@ -170,33 +113,12 @@ namespace Decentraland.Terrain
 
             Bounds bounds = GetBounds(terrainData);
 
-            var clipPlanes = new NativeArray<ClipPlane>(6, Allocator.TempJob,
-                NativeArrayOptions.UninitializedMemory);
+            var cameraFrustum = new ClipVolume(camera.projectionMatrix * camera.worldToCameraMatrix,
+                Allocator.TempJob);
 
-            var worldToProjectionMatrix = camera.projectionMatrix * camera.worldToCameraMatrix;
-
-            float4 row0 = worldToProjectionMatrix.GetRow(0);
-            float4 row1 = worldToProjectionMatrix.GetRow(1);
-            float4 row2 = worldToProjectionMatrix.GetRow(2);
-            float4 row3 = worldToProjectionMatrix.GetRow(3);
-
-            clipPlanes[0] = new ClipPlane(row3 + row0);
-            clipPlanes[1] = new ClipPlane(row3 - row0);
-            clipPlanes[2] = new ClipPlane(row3 + row1);
-            clipPlanes[3] = new ClipPlane(row3 - row1);
-            clipPlanes[4] = new ClipPlane(row3 + row2);
-            clipPlanes[5] = new ClipPlane(row3 - row2);
-
-            var projectionToWorldMatrix = worldToProjectionMatrix.inverse;
-            float3 clipCorner0 = projectionToWorldMatrix.MultiplyPoint(CLIP_CORNERS[0]);
-            MinMaxAABB clipBounds = new MinMaxAABB(clipCorner0, clipCorner0);
-
-            for (int i = 1; i < CLIP_CORNERS.Length; i++)
-                clipBounds.Encapsulate(projectionToWorldMatrix.MultiplyPoint(CLIP_CORNERS[i]));
-
-            if (!OverlapsClipVolume(bounds.ToMinMaxAABB(), clipBounds, clipPlanes))
+            if (!cameraFrustum.Overlaps(bounds.ToMinMaxAABB()))
             {
-                clipPlanes.Dispose();
+                cameraFrustum.Dispose();
                 return;
             }
 
@@ -211,9 +133,6 @@ namespace Decentraland.Terrain
 
             if (renderGround)
             {
-                if (!magicPattern.IsCreated)
-                    magicPattern = CreateMagicPattern();
-
                 groundInstanceCounts = new NativeArray<int>(terrainData.GroundMeshes.Length,
                     Allocator.TempJob);
 
@@ -222,13 +141,11 @@ namespace Decentraland.Terrain
 
                 var generateGroundJob = new GenerateGroundJob()
                 {
-                    terrainData = terrainData.GetData(),
-                    cameraPosition = cameraPosition,
-                    clipBounds = clipBounds,
-                    clipPlanes = clipPlanes,
-                    magicPattern = magicPattern,
-                    instanceCounts = groundInstanceCounts,
-                    transforms = groundTransforms
+                    TerrainData = terrainData.GetData(),
+                    CameraPosition = cameraPosition,
+                    CameraFrustum = cameraFrustum,
+                    InstanceCounts = groundInstanceCounts,
+                    Transforms = groundTransforms
                 };
 
                 generateGround = generateGroundJob.Schedule();
@@ -256,8 +173,8 @@ namespace Decentraland.Terrain
 
             if (renderTreesAndDetail)
             {
-                int2 min = (int2)floor(clipBounds.Min.xz / terrainData.ParcelSize);
-                int2 size = (int2)ceil(clipBounds.Max.xz / terrainData.ParcelSize) - min;
+                int2 min = (int2)floor(cameraFrustum.Bounds.Min.xz / terrainData.ParcelSize);
+                int2 size = (int2)ceil(cameraFrustum.Bounds.Max.xz / terrainData.ParcelSize) - min;
                 RectInt clipRect = new RectInt(min.x, min.y, size.x, size.y);
                 clipRect.ClampToBounds(terrainData.Bounds);
 
@@ -331,7 +248,7 @@ namespace Decentraland.Terrain
                     cameraPosition = cameraPosition,
                     clipRectMin = int2(clipRect.x, clipRect.y),
                     clipRectSizeX = clipRect.width,
-                    clipPlanes = clipPlanes,
+                    cameraFrustum = cameraFrustum,
                     treePrototypes = treePrototypes,
                     treeLods = treeLods,
                     detailPrototypes = detailPrototypes,
@@ -340,7 +257,8 @@ namespace Decentraland.Terrain
                     detailInstances = detailInstances.AsParallelWriter()
                 };
 
-                scatterObjects = scatterObjectsJob.Schedule(clipRect.width * clipRect.height);
+                scatterObjects = scatterObjectsJob.Schedule(clipRect.width * clipRect.height,
+                    clipRect.width);
 
                 treeInstanceCounts = new NativeArray<int>(treeMeshCount, Allocator.TempJob);
                 treeTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
@@ -421,8 +339,6 @@ namespace Decentraland.Terrain
             if (renderTreesAndDetail)
             {
                 scatterObjects.Complete();
-                clipPlanes.Dispose();
-
                 prepareTreeRenderList.Complete();
 
                 if (treeInstances.Length > treeInstances.Capacity)
@@ -471,6 +387,7 @@ namespace Decentraland.Terrain
                 detailTransforms.Dispose();
             }
 
+            cameraFrustum.Dispose();
             Profiler.EndSample();
         }
 
@@ -585,106 +502,6 @@ namespace Decentraland.Terrain
         }
 
         [BurstCompile]
-        private struct GenerateGroundJob : IJob
-        {
-            public TerrainDataData terrainData;
-            public float3 cameraPosition;
-            public MinMaxAABB clipBounds;
-            [ReadOnly] public NativeArray<ClipPlane> clipPlanes;
-            [ReadOnly] public NativeArray<int4> magicPattern;
-            public NativeArray<int> instanceCounts;
-            public NativeList<Matrix4x4> transforms;
-
-            public void Execute()
-            {
-                int2 origin = (PositionToParcel(cameraPosition) + 1) & ~1;
-                int scale = (int)(cameraPosition.y / terrainData.parcelSize) + 1;
-                var instances = new NativeList<GroundInstance>(transforms.Length, Allocator.Temp);
-
-                for (int i = 0; i < 4; i++)
-                    TryGenerateGround(origin, magicPattern[i], scale, instances);
-
-                while (true)
-                {
-                    bool stop = true;
-
-                    for (int i = 4; i < 16; i++)
-                        if (TryGenerateGround(origin, magicPattern[i], scale, instances))
-                            stop = false;
-
-                    if (stop || scale >= int.MaxValue / 2)
-                        break;
-
-                    scale *= 2;
-                }
-
-                instances.Sort();
-
-                if (transforms.Capacity < instances.Length)
-                    transforms.Capacity = instances.Length;
-
-                int instanceCount = 0;
-                int meshIndex = 0;
-
-                for (int instanceIndex = 0; instanceIndex < instances.Length; instanceIndex++)
-                {
-                    GroundInstance instance = instances[instanceIndex];
-
-                    if (meshIndex < instance.meshIndex)
-                    {
-                        instanceCounts[meshIndex] = instanceCount;
-                        meshIndex = instance.meshIndex;
-                        instanceCount = 0;
-                    }
-
-                    instanceCount++;
-
-                    transforms.AddNoResize(Matrix4x4.TRS(
-                        new Vector3(instance.positionXZ.x, 0f, instance.positionXZ.y),
-                        Quaternion.Euler(0f, instance.rotationY, 0f),
-                        new Vector3(instance.scale, instance.scale, instance.scale)));
-                }
-
-                instanceCounts[meshIndex] = instanceCount;
-                instances.Dispose();
-            }
-
-            private int2 PositionToParcel(float3 value)
-            {
-                return (int2)floor(value.xz * (1f / terrainData.parcelSize));
-            }
-
-            private bool TryGenerateGround(int2 origin, int4 magic, int scale,
-                NativeList<GroundInstance> instances)
-            {
-                int2 min = origin + magic.xy * scale;
-                int2 max = min + scale;
-                int parcelSize = terrainData.parcelSize;
-
-                var bounds = new MinMaxAABB(float3(min.x * parcelSize, 0f, min.y * parcelSize),
-                    float3(max.x * parcelSize, terrainData.maxHeight, max.y * parcelSize));
-
-                if (!OverlapsClipVolume(bounds, clipBounds, clipPlanes))
-                    return false;
-
-                if (!terrainData.BoundsOverlaps(int4(min, scale, scale)))
-                    // Skip this instance, but keep generating. The case to consider is when the camera
-                    // is far outside the bounds of the terrain.
-                    return true;
-
-                instances.Add(new GroundInstance()
-                {
-                    meshIndex = magic.z,
-                    positionXZ = bounds.Center.xz,
-                    rotationY = magic.w,
-                    scale = scale
-                });
-
-                return true;
-            }
-        }
-
-        [BurstCompile]
         private struct PrepareDetailRenderListJob : IJob
         {
             public NativeList<DetailInstance> instances;
@@ -780,7 +597,7 @@ namespace Decentraland.Terrain
             public float3 cameraPosition;
             public int2 clipRectMin;
             public int clipRectSizeX;
-            [ReadOnly] public NativeArray<ClipPlane> clipPlanes;
+            [ReadOnly] public ClipVolume cameraFrustum;
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreePrototypeData> treePrototypes;
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreeLODData> treeLods;
             [ReadOnly, DeallocateOnJobCompletion] public NativeArray<DetailPrototypeData> detailPrototypes;
@@ -792,11 +609,11 @@ namespace Decentraland.Terrain
             {
                 int2 parcel = int2(index % clipRectSizeX, index / clipRectSizeX) + clipRectMin;
 
-                if (terrainData.IsOccupied(parcel)
-                    || !terrainData.OverlapsClipVolume(parcel, clipPlanes))
-                {
+                if (terrainData.IsOccupied(parcel))
                     return;
-                }
+
+                if (!cameraFrustum.Overlaps(terrainData.GetParcelBounds(parcel)))
+                    return;
 
                 Random random = terrainData.GetRandom(parcel);
 
@@ -916,16 +733,6 @@ namespace Decentraland.Terrain
             public float maxScaleXZ;
             public float minScaleY;
             public float maxScaleY;
-        }
-
-        private struct GroundInstance : IComparable<GroundInstance>
-        {
-            public int meshIndex;
-            public float2 positionXZ;
-            public float rotationY;
-            public float scale;
-
-            public int CompareTo(GroundInstance other) => meshIndex - other.meshIndex;
         }
 
         private struct TreeInstance : IComparable<TreeInstance>
