@@ -630,12 +630,12 @@ namespace Decentraland.Terrain
 
     public sealed class TerrainRendererState : IDisposable
     {
-        internal bool RenderDetailIndirect;
+        public bool RenderDetailIndirect;
         internal TerrainRenderer Renderer;
-        internal bool RenderToAllCameras;
+        public bool RenderToAllCameras;
         internal Transform SpeedTreeParent;
         internal Renderer[] SpeedTreeRenderers;
-        internal TerrainData TerrainData;
+        public TerrainData TerrainData;
 
         public TerrainRendererState()
         {
