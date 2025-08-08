@@ -220,9 +220,9 @@ namespace Decentraland.Terrain
             visibleParcelsComputeBuffer = new ComputeBuffer(512 * 512, sizeof(int) * 2);
             visibleparcelCountComputeBuffer = new ComputeBuffer(1, sizeof(int));
             grassInstancesComputeBuffer = new ComputeBuffer(256 * 256, System.Runtime.InteropServices.Marshal.SizeOf<PerInst>());
-            flower0InstancesComputeBuffer = new ComputeBuffer(256 * 256, System.Runtime.InteropServices.Marshal.SizeOf<PerInst>(), ComputeBufferType.Append);
-            flower1InstancesComputeBuffer = new ComputeBuffer(256 * 256, System.Runtime.InteropServices.Marshal.SizeOf<PerInst>(), ComputeBufferType.Append);
-            flower2InstancesComputeBuffer = new ComputeBuffer(256 * 256, System.Runtime.InteropServices.Marshal.SizeOf<PerInst>(), ComputeBufferType.Append);
+            flower0InstancesComputeBuffer = new ComputeBuffer(64 * 256, System.Runtime.InteropServices.Marshal.SizeOf<PerInst>());
+            flower1InstancesComputeBuffer = new ComputeBuffer(64 * 256, System.Runtime.InteropServices.Marshal.SizeOf<PerInst>());
+            flower2InstancesComputeBuffer = new ComputeBuffer(64 * 256, System.Runtime.InteropServices.Marshal.SizeOf<PerInst>());
             arrInstCount = new GraphicsBuffer(GraphicsBuffer.Target.Structured, GraphicsBuffer.UsageFlags.None, 3, sizeof(uint));
             grassDrawArgs = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, count: 1, GraphicsBuffer.IndirectDrawIndexedArgs.size);
             flower0DrawArgs = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, count: 1, GraphicsBuffer.IndirectDrawIndexedArgs.size);
