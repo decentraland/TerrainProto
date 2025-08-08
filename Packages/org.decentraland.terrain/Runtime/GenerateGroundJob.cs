@@ -33,7 +33,7 @@ namespace Decentraland.Terrain
         public void Execute()
         {
             int2 origin = (PositionToParcel(CameraPosition) + 1) & ~1;
-            int scale = (int)(CameraPosition.y / TerrainData.parcelSize) + 1;
+            int scale = (int)(CameraPosition.y / TerrainData.ParcelSize) + 1;
             var instances = new NativeList<GroundInstance>(Transforms.Capacity, Allocator.Temp);
 
             for (int i = 0; i < 4; i++)
@@ -86,7 +86,7 @@ namespace Decentraland.Terrain
 
         private int2 PositionToParcel(float3 value)
         {
-            return (int2)floor(value.xz * (1f / TerrainData.parcelSize));
+            return (int2)floor(value.xz * (1f / TerrainData.ParcelSize));
         }
 
         private bool TryGenerateGround(int2 origin, int4 magic, int scale,
@@ -94,7 +94,7 @@ namespace Decentraland.Terrain
         {
             int2 min = origin + magic.xy * scale;
             int2 max = min + scale;
-            int parcelSize = TerrainData.parcelSize;
+            int parcelSize = TerrainData.ParcelSize;
 
             var bounds = new MinMaxAABB(float3(min.x * parcelSize, 0f, min.y * parcelSize),
                 float3(max.x * parcelSize, TerrainData.maxHeight, max.y * parcelSize));

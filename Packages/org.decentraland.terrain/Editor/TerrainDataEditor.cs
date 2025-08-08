@@ -101,6 +101,7 @@ namespace Decentraland.Terrain
                 LODGroup lodGroup = prototype.Source.GetComponent<LODGroup>();
                 prototype.LocalSize = lodGroup.size;
                 LOD[] groupLods = lodGroup.GetLODs();
+
                 TreeLOD[] prototypeLods = prototype.Lods;
                 Array.Resize(ref prototypeLods, groupLods.Length);
                 prototype.Lods = prototypeLods;

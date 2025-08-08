@@ -7,10 +7,13 @@ namespace Decentraland.Terrain
 {
     /// <remarks>
     /// Why not <see cref="UnityEngine.Pool.ObjectPool{T}"/>? Because it is not serializable and is not
-    /// preserved when reloading scripts during play mode.
+    /// preserved when reloading scripts during play mode. Also, crazy corner case: if this was a class,
+    /// and we used null to mean we don't need a pool, and that was in an array that is
+    /// script-reload-serializable, it would get deserialized to a zeroed out object instead of null,
+    /// because YAML can't have nulls.
     /// </remarks>
     [Serializable]
-    public sealed class PrefabInstancePool : IDisposable
+    public struct PrefabInstancePool : IDisposable
     {
         private List<GameObject> instances;
         private GameObject prefab;
@@ -63,6 +66,8 @@ namespace Decentraland.Terrain
 
             return item;
         }
+
+        public bool IsCreated => prefab != null;
 
         public void Release(GameObject item)
         {

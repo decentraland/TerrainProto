@@ -47,7 +47,7 @@ namespace Decentraland.Terrain
                 return;
 
             TerrainDataData terrainData = state.terrainData.GetData();
-            float useRadius = terrainData.parcelSize * (1f / 3f);
+            float useRadius = terrainData.ParcelSize * (1f / 3f);
 
             for (int i = 0; i < userPositionsXZ.Count; i++)
             {
@@ -102,8 +102,8 @@ namespace Decentraland.Terrain
                             state.usedParcels.Add(parcelData);
 
                             parcelData.collider.transform.position = new Vector3(
-                                parcel.x * terrainData.parcelSize, 0f,
-                                parcel.y * terrainData.parcelSize);
+                                parcel.x * terrainData.ParcelSize, 0f,
+                                parcel.y * terrainData.ParcelSize);
 
                             for (int j = 0; j < parcelData.trees.Count; j++)
                             {
@@ -128,8 +128,8 @@ namespace Decentraland.Terrain
                         parcelData.collider.cookingOptions = MeshColliderCookingOptions.UseFastMidphase;
                         Transform transform = parcelData.collider.transform;
 
-                        transform.position = new Vector3(parcel.x * terrainData.parcelSize, 0f,
-                            parcel.y * terrainData.parcelSize);
+                        transform.position = new Vector3(parcel.x * terrainData.ParcelSize, 0f,
+                            parcel.y * terrainData.ParcelSize);
 
                         transform.SetParent(state.parent, true);
 
@@ -147,7 +147,7 @@ namespace Decentraland.Terrain
             for (int i = 0; i < state.dirtyParcels.Count; i++)
                 parcels[i] = state.dirtyParcels[i].parcel;
 
-            int sideVertexCount = terrainData.parcelSize + 1;
+            int sideVertexCount = terrainData.ParcelSize + 1;
             int meshVertexCount = sideVertexCount * sideVertexCount;
 
             var vertices = new NativeArray<Vertex>(meshVertexCount * state.dirtyParcels.Count,
@@ -249,11 +249,11 @@ namespace Decentraland.Terrain
         private static Mesh CreateParcelMesh(in TerrainDataData terrainData)
         {
             if (indexBuffer == null)
-                indexBuffer = CreateIndexBuffer(terrainData.parcelSize);
+                indexBuffer = CreateIndexBuffer(terrainData.ParcelSize);
 
             var mesh = new Mesh() { name = "Parcel Collision Mesh" };
             mesh.MarkDynamic();
-            int sideVertexCount = terrainData.parcelSize + 1;
+            int sideVertexCount = terrainData.ParcelSize + 1;
             mesh.SetVertexBufferParams(sideVertexCount * sideVertexCount, vertexLayout);
             mesh.SetIndexBufferParams(indexBuffer.Length, IndexFormat.UInt16);
             mesh.subMeshCount = 1;
@@ -264,8 +264,8 @@ namespace Decentraland.Terrain
             mesh.SetIndexBufferData(indexBuffer, 0, 0, indexBuffer.Length, flags);
             mesh.SetSubMesh(0, new SubMeshDescriptor(0, indexBuffer.Length), flags);
 
-            Vector3 parcelMax = new Vector3(terrainData.parcelSize, terrainData.maxHeight,
-                terrainData.parcelSize);
+            Vector3 parcelMax = new Vector3(terrainData.ParcelSize, terrainData.maxHeight,
+                terrainData.ParcelSize);
 
             mesh.bounds = new Bounds(parcelMax * 0.5f, parcelMax);
 
@@ -290,14 +290,14 @@ namespace Decentraland.Terrain
                 }
 
                 Terrain.TreeInstance instance = instances[i];
-                PrefabInstancePool pool = state.treePools[instance.prototypeIndex];
+                PrefabInstancePool pool = state.treePools[instance.PrototypeIndex];
 
-                if (pool == null)
+                if (!pool.IsCreated)
                     continue;
 
                 var tree = new TreeInstance()
                 {
-                    prototypeIndex = instance.prototypeIndex,
+                    prototypeIndex = instance.PrototypeIndex,
                     gameObject = pool.Get()
                 };
 
@@ -329,14 +329,14 @@ namespace Decentraland.Terrain
             {
                 int batchEnd = startIndex + count;
                 int vertexIndex = startIndex;
-                int sideVertexCount = terrainData.parcelSize + 1;
+                int sideVertexCount = terrainData.ParcelSize + 1;
                 int meshVertexCount = sideVertexCount * sideVertexCount;
                 int meshIndex = startIndex / meshVertexCount;
 
                 while (vertexIndex < batchEnd)
                 {
                     int2 parcel = parcels[meshIndex];
-                    int2 parcelOriginXZ = parcel * terrainData.parcelSize;
+                    int2 parcelOriginXZ = parcel * terrainData.ParcelSize;
                     int meshStart = meshIndex * meshVertexCount;
                     int meshEnd = min(meshStart + meshVertexCount, batchEnd);
 
@@ -416,7 +416,7 @@ namespace Decentraland.Terrain
             {
                 PrefabInstancePool pool = treePools[i];
 
-                if (pool != null)
+                if (pool.IsCreated)
                     treePools[i].Dispose();
             }
         }

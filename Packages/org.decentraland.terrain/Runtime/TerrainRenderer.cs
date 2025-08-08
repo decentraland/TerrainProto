@@ -8,7 +8,7 @@ using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using static Decentraland.Terrain.TerrainLog;
 using static Unity.Mathematics.math;
-using Random = Unity.Mathematics.Random;
+using Object = UnityEngine.Object;
 
 namespace Decentraland.Terrain
 {
@@ -16,11 +16,15 @@ namespace Decentraland.Terrain
     public sealed class TerrainRenderer : MonoBehaviour
     {
         [field: SerializeField] private TerrainData TerrainData { get; set; }
-        [field: SerializeField] internal GrassIndirectRenderer GrassIndirectRenderer { get; private set; }
+        [field: SerializeField] internal GrassIndirectRenderer DetailIndirectRenderer { get; private set; }
 
-        private static MaterialPropertyBlock groundMatProps;
-        private static readonly int OCCUPANCY_MAP_ID = Shader.PropertyToID("_OccupancyMap");
+        private TerrainRendererState state;
+
+        private static MaterialPropertyBlock groundMaterialProperties;
+        private static MaterialPropertyBlock treeMaterialProperties;
+
         private static readonly int INV_PARCEL_SIZE_ID = Shader.PropertyToID("_InvParcelSize");
+        private static readonly int OCCUPANCY_MAP_ID = Shader.PropertyToID("_OccupancyMap");
         private static readonly int TERRAIN_BOUNDS_ID = Shader.PropertyToID("_TerrainBounds");
 
 #if UNITY_EDITOR
@@ -38,6 +42,20 @@ namespace Decentraland.Terrain
                 enabled = false;
                 return;
             }
+#endif
+
+            state ??= Application.isPlaying
+                ? new TerrainRendererState(TerrainData)
+                : new TerrainRendererState();
+
+            state.RenderDetailIndirect = DetailIndirectRenderer != null;
+            state.Renderer = this;
+            state.TerrainData = TerrainData;
+
+#if UNITY_EDITOR
+            state.RenderToAllCameras = true;
+#else
+            state.RenderToAllCameras = false;
 #endif
 
             Camera camera;
@@ -60,18 +78,11 @@ namespace Decentraland.Terrain
             if (camera == null)
                 return;
 
-#if UNITY_EDITOR
-            bool renderToAllCameras = true;
-#else
-            bool renderToAllCameras = false;
-#endif
 
-            bool renderGrassIndirect = GrassIndirectRenderer != null;
+            if (TerrainData.RenderDetail && state.RenderDetailIndirect)
+                DetailIndirectRenderer.Render(TerrainData, camera, state.RenderToAllCameras);
 
-            if (TerrainData.RenderTreesAndDetail && renderGrassIndirect)
-                GrassIndirectRenderer.Render(TerrainData, camera, renderToAllCameras);
-
-            Render(TerrainData, camera, renderToAllCameras, renderGrassIndirect, this);
+            Render(state, camera);
         }
 
         private void OnDrawGizmosSelected()
@@ -95,26 +106,38 @@ namespace Decentraland.Terrain
                 new Vector3(size.x, maxHeight, size.y));
         }
 
-        public static void Render(TerrainData terrainData, Camera camera, bool renderToAllCameras,
-            bool renderGrassIndirect = false, TerrainRenderer renderer = null)
+        public static void Render(TerrainRendererState state, Camera camera)
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (terrainData == null)
-                throw new ArgumentNullException(nameof(terrainData));
+            if (state.TerrainData == null)
+                throw new ArgumentNullException(nameof(state));
 
             if (camera == null)
                 throw new ArgumentNullException(nameof(camera));
 #endif
+
+            bool renderGround = state.TerrainData.RenderGround
+                                && state.TerrainData.GroundMaterial != null
+                                && state.TerrainData.GroundMeshes.Length == 3;
+
+            bool renderTrees = state.TerrainData.RenderTrees
+                               && state.TerrainData.TreePrototypes.Length > 0;
+
+            bool renderDetail = state.TerrainData.RenderDetail
+                                && state.TerrainData.DetailPrototypes.Length > 0
+                                && !state.RenderDetailIndirect;
+
+            if (!renderGround && !renderTrees && !renderDetail)
+                return;
 
             float3 cameraPosition = camera.transform.position;
 
             if (cameraPosition.y < 0f)
                 return;
 
-            Bounds bounds = GetBounds(terrainData);
-
-            var cameraFrustum = new ClipVolume(camera.projectionMatrix * camera.worldToCameraMatrix,
-                Allocator.TempJob);
+            Bounds bounds = GetBounds(state.TerrainData);
+            float4x4 worldToClip = camera.projectionMatrix * camera.worldToCameraMatrix;
+            var cameraFrustum = new ClipVolume(worldToClip, Allocator.TempJob);
 
             if (!cameraFrustum.Overlaps(bounds.ToMinMaxAABB()))
             {
@@ -124,8 +147,7 @@ namespace Decentraland.Terrain
 
             Profiler.BeginSample("RenderTerrain");
 
-            bool renderGround = terrainData.RenderGround && terrainData.GroundMaterial != null
-                                                         && terrainData.GroundMeshes.Length == 3;
+            TerrainDataData terrainData = state.TerrainData.GetData();
 
             JobHandle generateGround;
             NativeArray<int> groundInstanceCounts;
@@ -133,15 +155,15 @@ namespace Decentraland.Terrain
 
             if (renderGround)
             {
-                groundInstanceCounts = new NativeArray<int>(terrainData.GroundMeshes.Length,
+                groundInstanceCounts = new NativeArray<int>(state.TerrainData.GroundMeshes.Length,
                     Allocator.TempJob);
 
-                groundTransforms = new NativeList<Matrix4x4>(terrainData.GroundInstanceCapacity,
+                groundTransforms = new NativeList<Matrix4x4>(state.TerrainData.GroundInstanceCapacity,
                     Allocator.TempJob);
 
                 var generateGroundJob = new GenerateGroundJob()
                 {
-                    TerrainData = terrainData.GetData(),
+                    TerrainData = terrainData,
                     CameraPosition = cameraPosition,
                     CameraFrustum = cameraFrustum,
                     InstanceCounts = groundInstanceCounts,
@@ -157,108 +179,67 @@ namespace Decentraland.Terrain
                 groundTransforms = default;
             }
 
-            bool renderTreesAndDetail = terrainData.RenderTreesAndDetail
-                                        && (terrainData.TreePrototypes.Length > 0
-                                            || terrainData.DetailPrototypes.Length > 0);
+            int2 scatterRectMin = (int2)floor(cameraFrustum.Bounds.Min.xz / terrainData.ParcelSize);
 
-            JobHandle scatterObjects;
-            NativeList<TreeInstance> treeInstances;
+            int2 scatterRectSize = (int2)ceil(cameraFrustum.Bounds.Max.xz / terrainData.ParcelSize)
+                                   - scatterRectMin;
+
+            RectInt scatterRect = new RectInt(scatterRectMin.x, scatterRectMin.y, scatterRectSize.x,
+                scatterRectSize.y);
+
+            scatterRect.ClampToBounds(state.TerrainData.Bounds);
+
+            JobHandle scatterTrees;
+            NativeList<TreeInstanceData> treeInstances;
             NativeArray<int> treeInstanceCounts;
-            NativeList<DetailInstance> detailInstances;
-            NativeArray<int> detailInstanceCounts;
             JobHandle prepareTreeRenderList;
             NativeList<Matrix4x4> treeTransforms;
-            JobHandle prepareDetailRenderList;
-            NativeList<Matrix4x4> detailTransforms;
 
-            if (renderTreesAndDetail)
+            if (renderTrees)
             {
-                int2 min = (int2)floor(cameraFrustum.Bounds.Min.xz / terrainData.ParcelSize);
-                int2 size = (int2)ceil(cameraFrustum.Bounds.Max.xz / terrainData.ParcelSize) - min;
-                RectInt clipRect = new RectInt(min.x, min.y, size.x, size.y);
-                clipRect.ClampToBounds(terrainData.Bounds);
-
-                // Deallocated by ScatterObjectsJob
-                var treePrototypes = new NativeArray<TreePrototypeData>(
-                    terrainData.TreePrototypes.Length, Allocator.TempJob,
-                    NativeArrayOptions.UninitializedMemory);
+                if (state.SpeedTreeParent != null)
+                    state.SpeedTreeParent.position = inverse(worldToClip)
+                        .MultiplyPoint(float3(0f, 0f, EPSILON));
 
                 int treeMeshCount = 0;
 
-                for (int prototypeIndex = 0; prototypeIndex < treePrototypes.Length; prototypeIndex++)
+                for (int prototypeIndex = 0;
+                     prototypeIndex < state.TerrainData.TreePrototypes.Length;
+                     prototypeIndex++)
                 {
-                    TreePrototype prototype = terrainData.TreePrototypes[prototypeIndex];
-
-                    treePrototypes[prototypeIndex] = new TreePrototypeData()
-                    {
-                        localSize = prototype.LocalSize,
-                        lod0MeshIndex = treeMeshCount
-                    };
-
-                    treeMeshCount += prototype.Lods.Length;
+                    treeMeshCount += state.TerrainData.TreePrototypes[prototypeIndex].Lods.Length;
                 }
 
-                // Deallocated by ScatterObjectsJob
+                // Deallocated by ScatterTreesJob
                 var treeLods = new NativeArray<TreeLODData>(treeMeshCount, Allocator.TempJob,
                     NativeArrayOptions.UninitializedMemory);
 
-                for (int prototypeIndex = 0; prototypeIndex < treePrototypes.Length; prototypeIndex++)
+                for (int prototypeIndex = 0;
+                     prototypeIndex < state.TerrainData.TreePrototypes.Length;
+                     prototypeIndex++)
                 {
-                    TreeLOD[] lods = terrainData.TreePrototypes[prototypeIndex].Lods;
-                    int lod0MeshIndex = treePrototypes[prototypeIndex].lod0MeshIndex;
+                    TreeLOD[] lods = state.TerrainData.TreePrototypes[prototypeIndex].Lods;
+                    int lod0MeshIndex = terrainData.TreePrototypes[prototypeIndex].Lod0MeshIndex;
 
                     for (int lodIndex = 0; lodIndex < lods.Length; lodIndex++)
-                    {
-                        treeLods[lod0MeshIndex + lodIndex] = new TreeLODData()
-                        {
-                            minScreenSize = lods[lodIndex].MinScreenSize
-                        };
-                    }
+                        treeLods[lod0MeshIndex + lodIndex] = new TreeLODData(lods[lodIndex]);
                 }
 
-                // Deallocated by ScatterObjectsJob
-                var detailPrototypes = new NativeArray<DetailPrototypeData>(
-                    terrainData.DetailPrototypes.Length, Allocator.TempJob,
-                    NativeArrayOptions.UninitializedMemory);
-
-                for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
-                {
-                    DetailPrototype prototype = terrainData.DetailPrototypes[prototypeIndex];
-
-                    detailPrototypes[prototypeIndex] = new DetailPrototypeData()
-                    {
-                        density = prototype.Density,
-                        minScaleXZ = prototype.MinScaleXZ,
-                        maxScaleXZ = prototype.MaxScaleXZ,
-                        minScaleY = prototype.MinScaleY,
-                        maxScaleY = prototype.MaxScaleY
-                    };
-                }
-
-                treeInstances = new NativeList<TreeInstance>(terrainData.TreeInstanceCapacity,
+                treeInstances = new NativeList<TreeInstanceData>(state.TerrainData.TreeInstanceCapacity,
                     Allocator.TempJob);
 
-                detailInstances = new NativeList<DetailInstance>(terrainData.DetailInstanceCapacity,
-                    Allocator.TempJob);
-
-                var scatterObjectsJob = new ScatterObjectsJob()
+                var scatterTreesJob = new ScatterTreesJob()
                 {
-                    terrainData = terrainData.GetData(),
-                    detailSqrDistance = terrainData.DetailDistance * terrainData.DetailDistance,
-                    cameraPosition = cameraPosition,
-                    clipRectMin = int2(clipRect.x, clipRect.y),
-                    clipRectSizeX = clipRect.width,
-                    cameraFrustum = cameraFrustum,
-                    treePrototypes = treePrototypes,
-                    treeLods = treeLods,
-                    detailPrototypes = detailPrototypes,
-                    renderGrassIndirect = renderGrassIndirect,
-                    treeInstances = treeInstances.AsParallelWriter(),
-                    detailInstances = detailInstances.AsParallelWriter()
+                    TerrainData = terrainData,
+                    CameraPosition = cameraPosition,
+                    CameraFrustum = cameraFrustum,
+                    RectMin = int2(scatterRect.x, scatterRect.y),
+                    RectSizeX = scatterRect.width,
+                    Lods = treeLods,
+                    Instances = treeInstances.AsParallelWriter(),
                 };
 
-                scatterObjects = scatterObjectsJob.Schedule(clipRect.width * clipRect.height,
-                    clipRect.width);
+                scatterTrees = scatterTreesJob.Schedule(scatterRect.width * scatterRect.height);
 
                 treeInstanceCounts = new NativeArray<int>(treeMeshCount, Allocator.TempJob);
                 treeTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
@@ -270,11 +251,50 @@ namespace Decentraland.Terrain
                     transforms = treeTransforms
                 };
 
-                prepareTreeRenderList = prepareTreeRenderListJob.Schedule(scatterObjects);
+                prepareTreeRenderList = prepareTreeRenderListJob.Schedule(scatterTrees);
+            }
+            else
+            {
+                scatterTrees = default;
+                treeInstances = default;
+                treeInstanceCounts = default;
+                prepareTreeRenderList = default;
+                treeTransforms = default;
+            }
 
-                detailInstanceCounts = new NativeArray<int>(detailPrototypes.Length,
-                    Allocator.TempJob);
+            JobHandle scatterDetail;
+            NativeList<DetailInstanceData> detailInstances;
+            NativeArray<int> detailInstanceCounts;
+            JobHandle prepareDetailRenderList;
+            NativeList<Matrix4x4> detailTransforms;
 
+            if (renderDetail)
+            {
+                // Deallocated by ScatterDetailJob
+                var detailPrototypes = new NativeArray<DetailPrototypeData>(
+                    state.TerrainData.DetailPrototypes.Length, Allocator.TempJob,
+                    NativeArrayOptions.UninitializedMemory);
+
+                for (int i = 0; i < detailPrototypes.Length; i++)
+                    detailPrototypes[i] = new DetailPrototypeData(
+                        state.TerrainData.DetailPrototypes[i]);
+
+                detailInstances = new NativeList<DetailInstanceData>(
+                    state.TerrainData.DetailInstanceCapacity, Allocator.TempJob);
+
+                var scatterDetailJob = new ScatterDetailJob()
+                {
+                    TerrainData = terrainData,
+                    CameraPosition = cameraPosition,
+                    CameraFrustum = cameraFrustum,
+                    RectMin = int2(scatterRect.x, scatterRect.y),
+                    RectSizeX = scatterRect.width,
+                    Instances = detailInstances.AsParallelWriter(),
+                };
+
+                scatterDetail = scatterDetailJob.Schedule(scatterRect.width * scatterRect.height);
+
+                detailInstanceCounts = new NativeArray<int>(detailPrototypes.Length, Allocator.TempJob);
                 detailTransforms = new NativeList<Matrix4x4>(Allocator.TempJob);
 
                 var prepareDetailRenderListJob = new PrepareDetailRenderListJob()
@@ -284,17 +304,13 @@ namespace Decentraland.Terrain
                     transforms = detailTransforms
                 };
 
-                prepareDetailRenderList = prepareDetailRenderListJob.Schedule(scatterObjects);
+                prepareDetailRenderList = prepareDetailRenderListJob.Schedule(scatterDetail);
             }
             else
             {
-                scatterObjects = default;
-                treeInstances = default;
-                treeInstanceCounts = default;
+                scatterDetail = default;
                 detailInstances = default;
                 detailInstanceCounts = default;
-                prepareTreeRenderList = default;
-                treeTransforms = default;
                 prepareDetailRenderList = default;
                 detailTransforms = default;
             }
@@ -307,80 +323,86 @@ namespace Decentraland.Terrain
                 worldBounds = bounds,
             };
 
-            if (!renderToAllCameras)
+            if (!state.RenderToAllCameras)
                 renderParams.camera = camera;
 
             if (renderGround)
             {
                 generateGround.Complete();
 
-                if (groundTransforms.Length > terrainData.GroundInstanceCapacity)
+                if (groundTransforms.Length > state.TerrainData.GroundInstanceCapacity)
                 {
-                    terrainData.GroundInstanceCapacity
-                        = (int)ceil(terrainData.GroundInstanceCapacity * 1.1f);
+                    state.TerrainData.GroundInstanceCapacity
+                        = (int)ceil(state.TerrainData.GroundInstanceCapacity * 1.1f);
 
-                    LogHandler.LogFormat(LogType.Warning, terrainData,
+                    LogHandler.LogFormat(LogType.Warning, state.TerrainData,
                         "The {0} list ran out of space. Increasing capacity to {1}.",
-                        nameof(groundTransforms), terrainData.GroundInstanceCapacity);
+                        nameof(groundTransforms), state.TerrainData.GroundInstanceCapacity);
                 }
 
 #if UNITY_EDITOR
-                if (renderer != null)
-                    renderer.GroundInstanceCount = groundTransforms.Length;
+                if (state.Renderer != null)
+                    state.Renderer.GroundInstanceCount = groundTransforms.Length;
 #endif
 
-                RenderGround(terrainData, renderParams, groundTransforms.AsArray(),
+                RenderGround(state.TerrainData, renderParams, groundTransforms.AsArray(),
                     groundInstanceCounts);
 
                 groundInstanceCounts.Dispose();
                 groundTransforms.Dispose();
             }
 
-            if (renderTreesAndDetail)
+            if (renderTrees)
             {
-                scatterObjects.Complete();
+                scatterTrees.Complete();
                 prepareTreeRenderList.Complete();
 
                 if (treeInstances.Length > treeInstances.Capacity)
                 {
-                    terrainData.TreeInstanceCapacity
-                        = (int)ceil(terrainData.TreeInstanceCapacity * 1.1f);
+                    state.TerrainData.TreeInstanceCapacity
+                        = (int)ceil(state.TerrainData.TreeInstanceCapacity * 1.1f);
 
-                    LogHandler.LogFormat(LogType.Warning, terrainData,
+                    LogHandler.LogFormat(LogType.Warning, state.TerrainData,
                         "The {0} list ran out of space. Increasing capacity to {1}.",
-                        nameof(treeInstances), terrainData.TreeInstanceCapacity);
+                        nameof(treeInstances), state.TerrainData.TreeInstanceCapacity);
                 }
 
 #if UNITY_EDITOR
-                if (renderer != null)
-                    renderer.TreeInstanceCount = treeInstances.Length;
+                if (state.Renderer != null)
+                    state.Renderer.TreeInstanceCount = treeInstances.Length;
 #endif
 
                 treeInstances.Dispose();
-                RenderTrees(terrainData, renderParams, treeTransforms.AsArray(), treeInstanceCounts);
+
+                RenderTrees(state, renderParams, treeTransforms.AsArray(), treeInstanceCounts);
+
                 treeInstanceCounts.Dispose();
                 treeTransforms.Dispose();
+            }
 
+            if (renderDetail)
+            {
+                scatterDetail.Complete();
                 prepareDetailRenderList.Complete();
 
                 if (detailInstances.Length > detailInstances.Capacity)
                 {
-                    terrainData.DetailInstanceCapacity
-                        = (int)ceil(terrainData.DetailInstanceCapacity * 1.1f);
+                    state.TerrainData.DetailInstanceCapacity
+                        = (int)ceil(state.TerrainData.DetailInstanceCapacity * 1.1f);
 
-                    LogHandler.LogFormat(LogType.Warning, terrainData,
+                    LogHandler.LogFormat(LogType.Warning, state.TerrainData,
                         "The {0} list ran out of space. Increasing capacity to {1}.",
-                        nameof(detailInstances), terrainData.DetailInstanceCapacity);
+                        nameof(detailInstances), state.TerrainData.DetailInstanceCapacity);
                 }
 
 #if UNITY_EDITOR
-                if (renderer != null)
-                    renderer.DetailInstanceCount = detailInstances.Length;
+                if (state.Renderer != null)
+                    state.Renderer.DetailInstanceCount = detailInstances.Length;
 #endif
 
                 detailInstances.Dispose();
 
-                RenderDetail(terrainData, renderParams, detailTransforms.AsArray(),
+                RenderDetail(state, renderParams, detailTransforms.AsArray(),
                     detailInstanceCounts);
 
                 detailInstanceCounts.Dispose();
@@ -391,16 +413,14 @@ namespace Decentraland.Terrain
             Profiler.EndSample();
         }
 
-        private static void RenderDetail(TerrainData terrainData, RenderParams renderParams,
+        private static void RenderDetail(TerrainRendererState state, RenderParams renderParams,
             NativeArray<Matrix4x4> instanceData, NativeArray<int> instanceCounts)
         {
             if (instanceData.Length == 0)
                 return;
 
-            DetailPrototype[] prototypes = terrainData.DetailPrototypes;
+            DetailPrototype[] prototypes = state.TerrainData.DetailPrototypes;
             int startInstance = 0;
-            renderParams.matProps = null;
-            renderParams.shadowCastingMode = ShadowCastingMode.Off;
 
             for (int prototypeIndex = 0; prototypeIndex < prototypes.Length; prototypeIndex++)
             {
@@ -430,20 +450,20 @@ namespace Decentraland.Terrain
                 terrainData.Bounds.x, terrainData.Bounds.x + terrainData.Bounds.width,
                 terrainData.Bounds.y, terrainData.Bounds.y + terrainData.Bounds.height);
 
-            if (groundMatProps == null)
-                groundMatProps = new MaterialPropertyBlock();
+            if (groundMaterialProperties == null)
+                groundMaterialProperties = new MaterialPropertyBlock();
 
             if (terrainData.OccupancyMap != null)
-                groundMatProps.SetTexture(OCCUPANCY_MAP_ID, terrainData.OccupancyMap);
+                groundMaterialProperties.SetTexture(OCCUPANCY_MAP_ID, terrainData.OccupancyMap);
             else
-                groundMatProps.Clear();
+                groundMaterialProperties.Clear();
 
-            groundMatProps.SetFloat(INV_PARCEL_SIZE_ID, 1f / terrainData.ParcelSize);
-            groundMatProps.SetVector(TERRAIN_BOUNDS_ID, bounds * terrainData.ParcelSize);
+            groundMaterialProperties.SetFloat(INV_PARCEL_SIZE_ID, 1f / terrainData.ParcelSize);
+            groundMaterialProperties.SetVector(TERRAIN_BOUNDS_ID, bounds * terrainData.ParcelSize);
 
             int startInstance = 0;
             renderParams.material = terrainData.GroundMaterial;
-            renderParams.matProps = groundMatProps;
+            renderParams.matProps = groundMaterialProperties;
             renderParams.shadowCastingMode = ShadowCastingMode.On;
 
             for (int meshIndex = 0; meshIndex < terrainData.GroundMeshes.Length; meshIndex++)
@@ -460,20 +480,38 @@ namespace Decentraland.Terrain
             }
         }
 
-        private static void RenderTrees(TerrainData terrainData, RenderParams renderParams,
+        private static void RenderTrees(TerrainRendererState state, RenderParams renderParams,
             NativeArray<Matrix4x4> instanceData, NativeArray<int> instanceCounts)
         {
             if (instanceData.Length == 0)
                 return;
 
-            TreePrototype[] prototypes = terrainData.TreePrototypes;
+            if (treeMaterialProperties == null)
+                treeMaterialProperties = new MaterialPropertyBlock();
+
+            TreePrototype[] prototypes = state.TerrainData.TreePrototypes;
             int meshIndex = 0;
             int startInstance = 0;
-            renderParams.matProps = null;
             renderParams.shadowCastingMode = ShadowCastingMode.On;
 
             for (int prototypeIndex = 0; prototypeIndex < prototypes.Length; prototypeIndex++)
             {
+                if (state.SpeedTreeRenderers != null
+                    && prototypeIndex < state.SpeedTreeRenderers.Length)
+                {
+                    Renderer renderer = state.SpeedTreeRenderers[prototypeIndex];
+
+                    if (renderer != null)
+                    {
+                        renderer.GetPropertyBlock(treeMaterialProperties);
+                        renderParams.matProps = treeMaterialProperties;
+                    }
+                    else
+                    {
+                        renderParams.matProps = null;
+                    }
+                }
+
                 TreeLOD[] lods = prototypes[prototypeIndex].Lods;
 
                 for (int lodIndex = 0; lodIndex < lods.Length; lodIndex++)
@@ -504,7 +542,7 @@ namespace Decentraland.Terrain
         [BurstCompile]
         private struct PrepareDetailRenderListJob : IJob
         {
-            public NativeList<DetailInstance> instances;
+            public NativeList<DetailInstanceData> instances;
             [WriteOnly] public NativeArray<int> instanceCounts;
             public NativeList<Matrix4x4> transforms;
 
@@ -525,20 +563,20 @@ namespace Decentraland.Terrain
 
                 for (int instanceIndex = 0; instanceIndex < totalInstanceCount; instanceIndex++)
                 {
-                    DetailInstance instance = instances[instanceIndex];
+                    DetailInstanceData instance = instances[instanceIndex];
 
-                    if (meshIndex < instance.meshIndex)
+                    if (meshIndex < instance.MeshIndex)
                     {
                         instanceCounts[meshIndex] = instanceCount;
-                        meshIndex = instance.meshIndex;
+                        meshIndex = instance.MeshIndex;
                         instanceCount = 0;
                     }
 
                     instanceCount++;
 
-                    transforms.AddNoResize(Matrix4x4.TRS(instance.position,
-                        Quaternion.Euler(0f, instance.rotationY, 0f),
-                        new Vector3(instance.scaleXZ, instance.scaleY, instance.scaleXZ)));
+                    transforms.AddNoResize(Matrix4x4.TRS(instance.Position,
+                        Quaternion.Euler(0f, instance.RotationY, 0f),
+                        new Vector3(instance.ScaleXZ, instance.ScaleY, instance.ScaleXZ)));
                 }
 
                 instanceCounts[meshIndex] = instanceCount;
@@ -548,7 +586,7 @@ namespace Decentraland.Terrain
         [BurstCompile]
         private struct PrepareTreeRenderListJob : IJob
         {
-            public NativeList<TreeInstance> instances;
+            public NativeList<TreeInstanceData> instances;
             [WriteOnly] public NativeArray<int> instanceCounts;
             public NativeList<Matrix4x4> transforms;
 
@@ -569,192 +607,87 @@ namespace Decentraland.Terrain
 
                 for (int instanceIndex = 0; instanceIndex < totalInstanceCount; instanceIndex++)
                 {
-                    TreeInstance instance = instances[instanceIndex];
+                    TreeInstanceData instance = instances[instanceIndex];
 
-                    if (meshIndex < instance.meshIndex)
+                    if (meshIndex < instance.MeshIndex)
                     {
                         instanceCounts[meshIndex] = instanceCount;
-                        meshIndex = instance.meshIndex;
+                        meshIndex = instance.MeshIndex;
                         instanceCount = 0;
                     }
 
                     instanceCount++;
 
-                    transforms.AddNoResize(Matrix4x4.TRS(instance.position,
-                        Quaternion.Euler(0f, instance.rotationY, 0f),
+                    transforms.AddNoResize(Matrix4x4.TRS(instance.Position,
+                        Quaternion.Euler(0f, instance.RotationY, 0f),
                         Vector3.one));
                 }
 
                 instanceCounts[meshIndex] = instanceCount;
             }
         }
+    }
 
-        [BurstCompile]
-        private struct ScatterObjectsJob : IJobParallelFor
+    public sealed class TerrainRendererState : IDisposable
+    {
+        internal bool RenderDetailIndirect;
+        internal TerrainRenderer Renderer;
+        internal bool RenderToAllCameras;
+        internal Transform SpeedTreeParent;
+        internal Renderer[] SpeedTreeRenderers;
+        internal TerrainData TerrainData;
+
+        public TerrainRendererState()
         {
-            public TerrainDataData terrainData;
-            public float detailSqrDistance;
-            public float3 cameraPosition;
-            public int2 clipRectMin;
-            public int clipRectSizeX;
-            [ReadOnly] public ClipVolume cameraFrustum;
-            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreePrototypeData> treePrototypes;
-            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<TreeLODData> treeLods;
-            [ReadOnly, DeallocateOnJobCompletion] public NativeArray<DetailPrototypeData> detailPrototypes;
-            public bool renderGrassIndirect;
-            public NativeList<TreeInstance>.ParallelWriter treeInstances;
-            public NativeList<DetailInstance>.ParallelWriter detailInstances;
+        }
 
-            public void Execute(int index)
+        public TerrainRendererState(TerrainData terrainData)
+        {
+            TerrainData = terrainData;
+
+#if TERRAIN
+            var windAssets = new SpeedTreeWindAsset[TerrainData.TreePrototypes.Length];
+            bool haveWindAssets = false;
+
+            for (int i = 0; i < TerrainData.TreePrototypes.Length; i++)
             {
-                int2 parcel = int2(index % clipRectSizeX, index / clipRectSizeX) + clipRectMin;
+                TreePrototype prototype = terrainData.TreePrototypes[i];
+                var tree = prototype.Source.GetComponentInChildren<Tree>();
 
-                if (terrainData.IsOccupied(parcel))
-                    return;
+                if (tree == null || tree.windAsset == null)
+                    continue;
 
-                if (!cameraFrustum.Overlaps(terrainData.GetParcelBounds(parcel)))
-                    return;
-
-                Random random = terrainData.GetRandom(parcel);
-
-                if (treePrototypes.Length > 0)
-                {
-                    ReadOnlySpan<Terrain.TreeInstance> instances = terrainData.GetTreeInstances(parcel);
-
-                    for (int i = 0; i < instances.Length; i++)
-                    {
-                        if (!terrainData.TryGenerateTree(parcel, instances[i], out float3 position,
-                                out float rotationY, out float scaleXZ, out float scaleY))
-                        {
-                            continue;
-                        }
-
-                        int prototypeIndex = instances[i].prototypeIndex;
-                        TreePrototypeData prototype = treePrototypes[prototypeIndex];
-                        float screenSize = prototype.localSize / distance(position, cameraPosition);
-                        int meshIndex = prototype.lod0MeshIndex;
-
-                        int meshEnd = prototypeIndex + 1 < treePrototypes.Length
-                            ? treePrototypes[prototypeIndex + 1].lod0MeshIndex
-                            : treeLods.Length;
-
-                        while (meshIndex < meshEnd && treeLods[meshIndex].minScreenSize > screenSize)
-                            meshIndex++;
-
-                        if (meshIndex < meshEnd)
-                        {
-                            var instance = new TreeInstance()
-                            {
-                                meshIndex = meshIndex,
-                                position = position,
-                                rotationY = rotationY,
-                                scaleXZ = scaleXZ,
-                                scaleY = scaleY
-                            };
-
-                            if (!treeInstances.TryAddNoResize(instance))
-                                break;
-                        }
-                    }
-                }
-
-                /*if (!renderGrassIndirect && detailPrototypes.Length > 0)
-                {
-                    float3 parcelCenter;
-                    parcelCenter.x = (parcel.x + 0.5f) * terrainData.parcelSize;
-                    parcelCenter.z = (parcel.y + 0.5f) * terrainData.parcelSize;
-                    parcelCenter.y = terrainData.GetHeight(parcelCenter.x, parcelCenter.z);
-
-                    if (distancesq(parcelCenter, cameraPosition) <= detailSqrDistance)
-                        for (int prototypeIndex = 0; prototypeIndex < detailPrototypes.Length; prototypeIndex++)
-                            if (!JitteredGrid(parcel, prototypeIndex, ref random, detailInstances))
-                                break;
-                }*/
+                windAssets[i] = tree.windAsset;
+                haveWindAssets = true;
             }
 
-            private bool JitteredGrid(int2 parcel, int meshIndex,
-                ref Random random, NativeList<DetailInstance>.ParallelWriter instances)
+            if (!haveWindAssets)
+                return;
+
+            SpeedTreeParent = new GameObject("SpeedTreeWind").transform;
+            SpeedTreeRenderers = new Renderer[terrainData.TreePrototypes.Length];
+
+            for (int i = 0; i < terrainData.TreePrototypes.Length; i++)
             {
-                DetailPrototypeData prototype = detailPrototypes[meshIndex];
-                int gridSize = (int)(prototype.density * terrainData.parcelSize);
-                float invGridSize = (float)terrainData.parcelSize / gridSize;
-                float2 corner0 = parcel * terrainData.parcelSize;
+                SpeedTreeWindAsset windAsset = windAssets[i];
 
-                int xMin = terrainData.IsOccupied(int2(parcel.x - 1, parcel.y)) ? 1 : 0;
-                int xMax = gridSize - (terrainData.IsOccupied(int2(parcel.x + 1, parcel.y)) ? 1 : 0);
-                int zMin = terrainData.IsOccupied(int2(parcel.x, parcel.y - 1)) ? 1 : 0;
-                int zMax = gridSize - (terrainData.IsOccupied(int2(parcel.x, parcel.y + 1)) ? 1 : 0);
+                if (windAsset == null)
+                    continue;
 
-                for (int z = zMin; z < zMax; z++)
-                for (int x = xMin; x < xMax; x++)
-                {
-                    float3 position;
-                    position.x = corner0.x + x * invGridSize + random.NextFloat(invGridSize);
-                    position.z = corner0.y + z * invGridSize + random.NextFloat(invGridSize);
-                    position.y = terrainData.GetHeight(position.x, position.z);
-
-                    float rotationY = random.NextFloat(-180f, 180f);
-
-                    float scaleXZ = random.NextFloat(prototype.minScaleXZ, prototype.maxScaleXZ);
-                    float scaleY = random.NextFloat(prototype.minScaleY, prototype.maxScaleY);
-
-                    DetailInstance instance = new DetailInstance()
-                    {
-                        meshIndex = meshIndex,
-                        position = position,
-                        rotationY = rotationY,
-                        scaleXZ = scaleXZ,
-                        scaleY = scaleY
-                    };
-
-                    if (!instances.TryAddNoResize(instance))
-                        return false;
-                }
-
-                return true;
+                TreePrototype prototype = terrainData.TreePrototypes[i];
+                var gameObject = new GameObject(prototype.Source.name);
+                SpeedTreeRenderers[i] = gameObject.AddComponent<MeshRenderer>();
+                var tree = gameObject.AddComponent<Tree>();
+                tree.windAsset = windAssets[i];
+                gameObject.transform.SetParent(SpeedTreeParent, false);
             }
+#endif
         }
 
-        private struct DetailInstance : IComparable<DetailInstance>
+        public void Dispose()
         {
-            public int meshIndex;
-            public float3 position;
-            public float rotationY;
-            public float scaleXZ;
-            public float scaleY;
-
-            public int CompareTo(DetailInstance other) => meshIndex - other.meshIndex;
-        }
-
-        private struct DetailPrototypeData
-        {
-            public float density;
-            public float minScaleXZ;
-            public float maxScaleXZ;
-            public float minScaleY;
-            public float maxScaleY;
-        }
-
-        private struct TreeInstance : IComparable<TreeInstance>
-        {
-            public int meshIndex;
-            public float3 position;
-            public float rotationY;
-            public float scaleXZ;
-            public float scaleY;
-
-            public int CompareTo(TreeInstance other) => meshIndex - other.meshIndex;
-        }
-
-        private struct TreeLODData
-        {
-            public float minScreenSize;
-        }
-
-        private struct TreePrototypeData
-        {
-            public float localSize;
-            public int lod0MeshIndex;
+            if (SpeedTreeParent != null)
+                Object.Destroy(SpeedTreeParent.gameObject);
         }
     }
 }

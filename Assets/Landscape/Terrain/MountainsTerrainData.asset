@@ -24,7 +24,8 @@ MonoBehaviour:
   <OccupancyMap>k__BackingField: {fileID: 2800000, guid: 3fb0d1129424bdb40a89f785c5ec75a8, type: 3}
   <DetailDistance>k__BackingField: 200
   <RenderGround>k__BackingField: 1
-  <RenderTreesAndDetail>k__BackingField: 1
+  <RenderTrees>k__BackingField: 1
+  <RenderDetail>k__BackingField: 1
   <GroundInstanceCapacity>k__BackingField: 80
   <TreeInstanceCapacity>k__BackingField: 3000
   <ClutterInstanceCapacity>k__BackingField: 1

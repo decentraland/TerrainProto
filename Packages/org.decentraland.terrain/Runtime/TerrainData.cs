@@ -24,7 +24,8 @@ namespace Decentraland.Terrain
         [field: SerializeField] public Texture2D OccupancyMap { get; set; }
         [field: SerializeField] public float DetailDistance { get; set; }
         [field: SerializeField] public bool RenderGround { get; set; } = true;
-        [field: SerializeField] public bool RenderTreesAndDetail { get; set; } = true;
+        [field: SerializeField] public bool RenderTrees { get; set; } = true;
+        [field: SerializeField] public bool RenderDetail { get; set; } = true;
         [field: SerializeField] internal int GroundInstanceCapacity { get; set; }
         [field: SerializeField] internal int TreeInstanceCapacity { get; set; }
         [field: SerializeField] internal int ClutterInstanceCapacity { get; set; }
@@ -49,8 +50,8 @@ namespace Decentraland.Terrain
         private int2 treeMaxParcel;
         private NativeArray<TreePrototypeData> treePrototypes;
 
-        private const int TERRAIN_SIZE_LIMIT = 512;
-        private const int TREE_INSTANCE_LIMIT = 262144; // 2 ^ 18
+        private const int TERRAIN_SIZE_LIMIT = 512; // 512x512 parcels
+        private const int TREE_INSTANCE_LIMIT = 262144; // 2^18 trees
 
         private void OnValidate()
         {
@@ -165,8 +166,14 @@ namespace Decentraland.Terrain
                 treePrototypes = new NativeArray<TreePrototypeData>(TreePrototypes.Length,
                     Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
 
+                int treeMeshCount = 0;
+
                 for (int i = 0; i < TreePrototypes.Length; i++)
-                    treePrototypes[i] = new TreePrototypeData(TreePrototypes[i]);
+                {
+                    TreePrototype prototype = TreePrototypes[i];
+                    treePrototypes[i] = new TreePrototypeData(prototype, treeMeshCount);
+                    treeMeshCount += prototype.Lods.Length;
+                }
             }
 
             if (loadTreeInstancesTask == null)
@@ -198,11 +205,11 @@ namespace Decentraland.Terrain
     internal readonly struct TerrainDataData
     {
         private readonly uint randomSeed;
-        public readonly int parcelSize;
+        public readonly int ParcelSize;
         public readonly float maxHeight;
         [ReadOnly] private readonly NativeArray<byte> occupancyMap;
         private readonly int occupancyMapSize;
-        [ReadOnly] private readonly NativeArray<TreePrototypeData> treePrototypes;
+        [ReadOnly] public readonly NativeArray<TreePrototypeData> TreePrototypes;
         [ReadOnly] private readonly NativeArray<int> treeIndices;
         [ReadOnly] private readonly NativeArray<TreeInstance> treeInstances;
         private readonly FunctionPointer<GetHeightDelegate> getHeight;
@@ -222,10 +229,10 @@ namespace Decentraland.Terrain
             int2 treeMinParcel, int2 treeMaxParcel)
         {
             this.randomSeed = randomSeed;
-            this.parcelSize = parcelSize;
+            ParcelSize = parcelSize;
             this.bounds = int4(bounds.xMin, bounds.yMin, bounds.xMax, bounds.yMax);
             this.maxHeight = maxHeight;
-            this.treePrototypes = treePrototypes;
+            TreePrototypes = treePrototypes;
             this.treeIndices = treeIndices;
             this.treeInstances = treeInstances;
             this.getHeight = getHeight;
@@ -259,7 +266,7 @@ namespace Decentraland.Terrain
                 // Take the bounds of the terrain, put a single pixel border around it, increase the
                 // size to the next power of two, map xz=0,0 to uv=0.5,0.5 and parcelSize to pixel size,
                 // and that's the occupancy map.
-                float2 uv = (float2(x, z) / parcelSize + occupancyMapSize * 0.5f) / occupancyMapSize;
+                float2 uv = (float2(x, z) / ParcelSize + occupancyMapSize * 0.5f) / occupancyMapSize;
                 occupancy = SampleBilinearClamp(occupancyMap, occupancyMapSize, uv);
             }
             else
@@ -288,8 +295,8 @@ namespace Decentraland.Terrain
 
         public MinMaxAABB GetParcelBounds(int2 parcel)
         {
-            int2 min = parcel * parcelSize;
-            int2 max = min + parcelSize;
+            int2 min = parcel * ParcelSize;
+            int2 max = min + ParcelSize;
             return new MinMaxAABB(float3(min.x, 0f, min.y), float3(max.x, maxHeight, max.y));
         }
 
@@ -371,12 +378,12 @@ namespace Decentraland.Terrain
                 }
             }
 
-            if (parcelSize - localPosition.x < radius)
+            if (ParcelSize - localPosition.x < radius)
             {
                 if (IsOccupied(int2(parcel.x + 1, parcel.y)))
                     return true;
 
-                if (parcelSize - localPosition.y < radius)
+                if (ParcelSize - localPosition.y < radius)
                 {
                     if (IsOccupied(int2(parcel.x + 1, parcel.y + 1)))
                         return true;
@@ -388,14 +395,14 @@ namespace Decentraland.Terrain
                 if (IsOccupied(int2(parcel.x, parcel.y - 1)))
                     return true;
 
-                if (parcelSize - localPosition.x < radius)
+                if (ParcelSize - localPosition.x < radius)
                 {
                     if (IsOccupied(int2(parcel.x + 1, parcel.y - 1)))
                         return true;
                 }
             }
 
-            if (parcelSize - localPosition.y < radius)
+            if (ParcelSize - localPosition.y < radius)
             {
                 if (IsOccupied(int2(parcel.x, parcel.y + 1)))
                     return true;
@@ -412,7 +419,7 @@ namespace Decentraland.Terrain
 
         internal RectInt PositionToParcelRect(float2 centerXZ, float radius)
         {
-            float invParcelSize = 1f / parcelSize;
+            float invParcelSize = 1f / ParcelSize;
             int2 min = (int2)floor((centerXZ - radius) * invParcelSize);
             int2 size = (int2)ceil((centerXZ + radius) * invParcelSize) - min;
             return new RectInt(min.x, min.y, size.x, size.y);
@@ -436,22 +443,22 @@ namespace Decentraland.Terrain
         public bool TryGenerateTree(int2 parcel, TreeInstance instance, out float3 position,
             out float rotationY, out float scaleXZ, out float scaleY)
         {
-            position.x = instance.positionX * parcelSize * (1f / 255f);
+            position.x = instance.PositionX * ParcelSize * (1f / 255f);
             position.y = 0f;
-            position.z = instance.positionZ * parcelSize * (1f / 255f);
+            position.z = instance.PositionZ * ParcelSize * (1f / 255f);
             rotationY = 0f;
             scaleXZ = 0f;
             scaleY = 0f;
-            TreePrototypeData prototype = treePrototypes[instance.prototypeIndex];
+            TreePrototypeData prototype = TreePrototypes[instance.PrototypeIndex];
 
             /*if (OverlapsOccupiedParcel(parcel, position.xz, prototype.radius))
                 return false;*/
 
-            position.xz += parcel * parcelSize;
+            position.xz += parcel * ParcelSize;
             position.y = GetHeight(position.x, position.z); // instance.positionY * (1f / 256f);
-            rotationY = instance.rotationY * (360f / 255f);
-            scaleXZ = prototype.minScaleXZ + instance.scaleXZ * prototype.scaleSizeXZ;
-            scaleY = prototype.minScaleY + instance.scaleY * prototype.scaleSizeY;
+            rotationY = instance.RotationY * (360f / 255f);
+            scaleXZ = prototype.MinScaleXZ + instance.ScaleXZ * prototype.ScaleSizeXZ;
+            scaleY = prototype.MinScaleY + instance.ScaleY * prototype.ScaleSizeY;
             return true;
         }
     }
@@ -459,6 +466,17 @@ namespace Decentraland.Terrain
     public delegate float GetHeightDelegate(float x, float z);
 
     public delegate void GetNormalDelegate(float x, float z, out float3 normal);
+
+    internal struct DetailInstanceData : IComparable<DetailInstanceData>
+    {
+        public int MeshIndex;
+        public float3 Position;
+        public float RotationY;
+        public float ScaleXZ;
+        public float ScaleY;
+
+        public int CompareTo(DetailInstanceData other) => MeshIndex - other.MeshIndex;
+    }
 
     [Serializable]
     internal struct DetailPrototype
@@ -471,6 +489,24 @@ namespace Decentraland.Terrain
         [field: SerializeField] public float MaxScaleY { get; private set; }
         [field: SerializeField] public Mesh Mesh { get; set; }
         [field: SerializeField] public Material Material { get; set; }
+    }
+
+    internal readonly struct DetailPrototypeData
+    {
+        public readonly float Density;
+        public readonly float MinScaleXZ;
+        public readonly float MaxScaleXZ;
+        public readonly float MinScaleY;
+        public readonly float MaxScaleY;
+
+        public DetailPrototypeData(DetailPrototype prototype)
+        {
+            Density = prototype.Density;
+            MinScaleXZ = prototype.MinScaleXZ;
+            MaxScaleXZ = prototype.MaxScaleXZ;
+            MinScaleY = prototype.MinScaleY;
+            MaxScaleY = prototype.MaxScaleY;
+        }
     }
 
     [Serializable]
@@ -501,31 +537,44 @@ namespace Decentraland.Terrain
 
     internal readonly struct TreeInstance
     {
-        public readonly byte prototypeIndex;
-        public readonly byte positionX;
-        public readonly short positionY;
-        public readonly byte positionZ;
-        public readonly byte rotationY;
-        public readonly byte scaleXZ;
-        public readonly byte scaleY;
+        public readonly byte PrototypeIndex;
+        public readonly byte PositionX;
+        public readonly short PositionY;
+        public readonly byte PositionZ;
+        public readonly byte RotationY;
+        public readonly byte ScaleXZ;
+        public readonly byte ScaleY;
 
+#if TERRAIN
         public TreeInstance(UnityEngine.TreeInstance instance, Vector3 position,
             int parcelSize, TreePrototype[] prototypes)
         {
-            float2 fracPos = frac(position.XZ() / parcelSize);
-            prototypeIndex = (byte)instance.prototypeIndex;
-            positionX = (byte)round(fracPos.x * 255f);
-            positionY = (short)round(position.y * 256f);
-            positionZ = (byte)round(fracPos.y * 255f);
-            rotationY = (byte)round(instance.rotation * (255f / PI2));
-            TreePrototype prototype = prototypes[prototypeIndex];
+            float2 fracPosition = frac(position.XZ() / parcelSize);
+            PrototypeIndex = (byte)instance.prototypeIndex;
+            PositionX = (byte)round(fracPosition.x * 255f);
+            PositionY = (short)round(position.y * 256f);
+            PositionZ = (byte)round(fracPosition.y * 255f);
+            RotationY = (byte)round(instance.rotation * (255f / PI2));
+            TreePrototype prototype = prototypes[PrototypeIndex];
 
-            scaleXZ = (byte)round((instance.widthScale - prototype.MinScaleXZ)
-                / (prototype.MaxScaleXZ - prototype.MaxScaleXZ) * 255f);
+            ScaleXZ = (byte)round((instance.widthScale - prototype.MinScaleXZ)
+                / (prototype.MaxScaleXZ - prototype.MinScaleXZ) * 255f);
 
-            scaleY = (byte)round((instance.heightScale - prototype.MinScaleY)
-                / (prototype.MaxScaleY - prototype.MaxScaleY) * 255f);
+            ScaleY = (byte)round((instance.heightScale - prototype.MinScaleY)
+                / (prototype.MaxScaleY - prototype.MinScaleY) * 255f);
         }
+#endif
+    }
+
+    internal struct TreeInstanceData : IComparable<TreeInstanceData>
+    {
+        public int MeshIndex;
+        public float3 Position;
+        public float RotationY;
+        public float ScaleXZ;
+        public float ScaleY;
+
+        public int CompareTo(TreeInstanceData other) => MeshIndex - other.MeshIndex;
     }
 
     [Serializable]
@@ -534,6 +583,16 @@ namespace Decentraland.Terrain
         [field: SerializeField] public Mesh Mesh { get; set; }
         [field: SerializeField] public float MinScreenSize { get; set; }
         [field: SerializeField] public Material[] Materials { get; set; }
+    }
+
+    internal readonly struct TreeLODData
+    {
+        public readonly float MinScreenSize;
+
+        public TreeLODData(TreeLOD lod)
+        {
+            MinScreenSize = lod.MinScreenSize;
+        }
     }
 
     [Serializable]
@@ -552,19 +611,23 @@ namespace Decentraland.Terrain
 
     internal readonly struct TreePrototypeData
     {
-        public readonly float minScaleXZ;
-        public readonly float scaleSizeXZ;
-        public readonly float minScaleY;
-        public readonly float scaleSizeY;
-        public readonly float radius;
+        public readonly float LocalSize;
+        public readonly float MinScaleXZ;
+        public readonly float ScaleSizeXZ;
+        public readonly float MinScaleY;
+        public readonly float ScaleSizeY;
+        public readonly float Radius;
+        public readonly int Lod0MeshIndex;
 
-        public TreePrototypeData(TreePrototype prototype)
+        public TreePrototypeData(TreePrototype prototype, int lod0MeshIndex)
         {
-            minScaleXZ = prototype.MinScaleXZ;
-            scaleSizeXZ = prototype.MaxScaleXZ - minScaleXZ;
-            minScaleY = prototype.MinScaleY;
-            scaleSizeY = prototype.MaxScaleY - minScaleY;
-            radius = prototype.Radius;
+            LocalSize = prototype.LocalSize;
+            MinScaleXZ = prototype.MinScaleXZ;
+            ScaleSizeXZ = prototype.MaxScaleXZ - MinScaleXZ;
+            MinScaleY = prototype.MinScaleY;
+            ScaleSizeY = prototype.MaxScaleY - MinScaleY;
+            Radius = prototype.Radius;
+            Lod0MeshIndex = lod0MeshIndex;
         }
     }
 }
