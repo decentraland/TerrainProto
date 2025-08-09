@@ -268,12 +268,6 @@ namespace Decentraland.Terrain
 
             int threadGroups = Mathf.CeilToInt((quadTreeNodes.Length - 87381) / 256.0f);
             QuadTreeCullingShader.Dispatch(kernelIndex, threadGroups, 1, 1);
-
-            // Read back results
-            visibleparcelCountComputeBuffer.GetData(visibleCount);
-            visibleCount[0] = Mathf.Min(visibleCount[0] * 256, 256 * 256);
-            grassArgs[1] = (uint)(visibleCount[0]); // instanceCount
-            grassDrawArgs.SetData(grassArgs);
         }
 
         public void GenerateScatteredGrass(TerrainData terrainData)
@@ -285,6 +279,8 @@ namespace Decentraland.Terrain
                 grassInstancesComputeBuffer == null ||
                 TerrainBlendTexture == null)
                 return;
+
+            grassDrawArgs.SetData(grassArgs);
 
             // Set up compute shader
             int kernelIndex = ScatterGrassShader.FindKernel("ScatterGrass");
@@ -305,6 +301,7 @@ namespace Decentraland.Terrain
             ScatterGrassShader.SetBuffer(kernelIndex, "visibleParcels", visibleParcelsComputeBuffer);
             ScatterGrassShader.SetBuffer(kernelIndex, "visibleParcelCount", visibleparcelCountComputeBuffer);
             ScatterGrassShader.SetBuffer(kernelIndex, "grassInstances", grassInstancesComputeBuffer);
+            ScatterGrassShader.SetBuffer(kernelIndex, "drawArgs", grassDrawArgs);
 
             uint threadGroupSizes_X, threadGroupSizes_Y, threadGroupSizes_Z;
             ScatterGrassShader.GetKernelThreadGroupSizes(kernelIndex, out threadGroupSizes_X, out threadGroupSizes_Y,
@@ -324,6 +321,9 @@ namespace Decentraland.Terrain
                 grassInstancesComputeBuffer == null ||
                 TerrainBlendTexture == null)
                 return;
+
+            flower0DrawArgs.SetData(flower0Args);
+            flower1DrawArgs.SetData(flower1Args);
 
             // Set up compute shader
             int kernelIndex = ScatterFlowersShader.FindKernel("FlowerScatter");
@@ -353,12 +353,12 @@ namespace Decentraland.Terrain
             ScatterFlowersShader.SetTexture(kernelIndex, "OccupancyTexture",
                 terrainData.OccupancyMap != null ? terrainData.OccupancyMap : Texture2D.blackTexture);
 
-            ScatterFlowersShader.SetBuffer(kernelIndex, "arrInstCount", arrInstCount);
             ScatterFlowersShader.SetBuffer(kernelIndex, "visibleParcels", visibleParcelsComputeBuffer);
             ScatterFlowersShader.SetBuffer(kernelIndex, "visibleParcelCount", visibleparcelCountComputeBuffer);
             ScatterFlowersShader.SetBuffer(kernelIndex, "flower0Instances", flower0InstancesComputeBuffer);
             ScatterFlowersShader.SetBuffer(kernelIndex, "flower1Instances", flower1InstancesComputeBuffer);
-            ScatterFlowersShader.SetBuffer(kernelIndex, "flower2Instances", flower2InstancesComputeBuffer);
+            ScatterFlowersShader.SetBuffer(kernelIndex, "drawArgs0", flower0DrawArgs);
+            ScatterFlowersShader.SetBuffer(kernelIndex, "drawArgs1", flower1DrawArgs);
 
             uint threadGroupSizes_X, threadGroupSizes_Y, threadGroupSizes_Z;
             ScatterFlowersShader.GetKernelThreadGroupSizes(kernelIndex, out threadGroupSizes_X, out threadGroupSizes_Y, out threadGroupSizes_Z);
@@ -366,13 +366,6 @@ namespace Decentraland.Terrain
                 Mathf.CeilToInt(16384.0f / threadGroupSizes_X),
                 Mathf.CeilToInt(1.0f / threadGroupSizes_Y),
                 Mathf.CeilToInt(1.0f / threadGroupSizes_Z));
-
-            arrInstCount.GetData(arrLODPull);
-            flower0Args[1] = (uint)(arrLODPull[0]); // instanceCount
-            flower1Args[1] = (uint)(arrLODPull[1]); // instanceCount
-
-            flower0DrawArgs.SetData(flower0Args);
-            flower1DrawArgs.SetData(flower1Args);
         }
 
         public void GenerateScatteredCatTails(TerrainData terrainData)
@@ -384,6 +377,8 @@ namespace Decentraland.Terrain
                 grassInstancesComputeBuffer == null ||
                 TerrainBlendTexture == null)
                 return;
+
+            flower2DrawArgs.SetData(flower2Args);
 
             // Set up compute shader
             int kernelIndex = ScatterCatTailsShader.FindKernel("CatTailScatter");
@@ -413,12 +408,10 @@ namespace Decentraland.Terrain
             ScatterCatTailsShader.SetTexture(kernelIndex, "OccupancyTexture",
                 terrainData.OccupancyMap != null ? terrainData.OccupancyMap : Texture2D.blackTexture);
 
-            ScatterCatTailsShader.SetBuffer(kernelIndex, "arrInstCount", arrInstCount);
             ScatterCatTailsShader.SetBuffer(kernelIndex, "visibleParcels", visibleParcelsComputeBuffer);
             ScatterCatTailsShader.SetBuffer(kernelIndex, "visibleParcelCount", visibleparcelCountComputeBuffer);
-            ScatterCatTailsShader.SetBuffer(kernelIndex, "flower0Instances", flower0InstancesComputeBuffer);
-            ScatterCatTailsShader.SetBuffer(kernelIndex, "flower1Instances", flower1InstancesComputeBuffer);
             ScatterCatTailsShader.SetBuffer(kernelIndex, "flower2Instances", flower2InstancesComputeBuffer);
+            ScatterCatTailsShader.SetBuffer(kernelIndex, "drawArgs2", flower2DrawArgs);
 
             uint threadGroupSizes_X, threadGroupSizes_Y, threadGroupSizes_Z;
             ScatterCatTailsShader.GetKernelThreadGroupSizes(kernelIndex, out threadGroupSizes_X, out threadGroupSizes_Y, out threadGroupSizes_Z);
@@ -426,10 +419,6 @@ namespace Decentraland.Terrain
                 Mathf.CeilToInt(16384.0f / threadGroupSizes_X),
                 Mathf.CeilToInt(1.0f / threadGroupSizes_Y),
                 Mathf.CeilToInt(1.0f / threadGroupSizes_Z));
-
-            arrInstCount.GetData(arrLODPull);
-            flower2Args[1] = (uint)(arrLODPull[2]); // instanceCount
-            flower2DrawArgs.SetData(flower2Args);
         }
 
         public static bool SetGlobalWindVector()

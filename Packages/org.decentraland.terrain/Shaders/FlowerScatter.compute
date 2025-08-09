@@ -39,10 +39,10 @@ SamplerState TerrainBlendPointRepeatSampler : register(s4);
 SamplerState samplerGroundDetailTexture : register(s5);
 SamplerState samplerSandDetailTexture : register(s6);
 
-shared RWStructuredBuffer<uint> arrInstCount : register(u0);
-RWStructuredBuffer<PerInst> flower0Instances : register(u1);
-RWStructuredBuffer<PerInst> flower1Instances : register(u2);
-RWStructuredBuffer<PerInst> flower2Instances : register(u3);
+RWStructuredBuffer<PerInst> flower0Instances : register(u0);
+RWStructuredBuffer<PerInst> flower1Instances : register(u1);
+shared RWStructuredBuffer<uint> drawArgs0 : register(u2);
+shared RWStructuredBuffer<uint> drawArgs1 : register(u3);
 
 [numthreads(64, 1, 1)]
 void FlowerScatter(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint3 localId : SV_GroupThreadID)
@@ -80,9 +80,8 @@ void FlowerScatter(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, u
     perInst.quatRotation = CreateGrassRotationQuaternion(normalWS, hash_int_to_float(corner0 + gridPosition) * 2.0f);
     perInst.colour = float4(1.0, 1.0, 1.0, 1.0);
 
-    uint original_out;
-    InterlockedAdd(arrInstCount[0], 1, original_out);
-    InterlockedAdd(arrInstCount[1], 1, original_out);
+    InterlockedAdd(drawArgs0[1], 1);
+    InterlockedAdd(drawArgs1[1], 1);
     flower0Instances[id.x] = perInst;
     perInst.position.xyz += float3(parcelGroupingArea.x, 0.0f,parcelGroupingArea.y);
     flower1Instances[id.x] = perInst;

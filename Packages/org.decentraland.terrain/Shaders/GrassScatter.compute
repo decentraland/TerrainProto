@@ -35,6 +35,7 @@ SamplerState samplerGroundDetailTexture : register(s5);
 SamplerState samplerSandDetailTexture : register(s6);
 
 RWStructuredBuffer<PerInst> grassInstances : register(u0);
+shared RWStructuredBuffer<uint> drawArgs : register(u1);
 
 [numthreads(256, 1, 1)]
 void ScatterGrass(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint3 localId : SV_GroupThreadID)
@@ -61,4 +62,6 @@ void ScatterGrass(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, ui
     perInst.quatRotation = CreateGrassRotationQuaternion(normalWS, hash_int_to_float(corner0 + gridPosition) * 2.0f);
     perInst.colour = SplatmapMix(UV_coords * 8.0f, TerrainBlendTexture, samplerTerrainBlendTexture, GroundDetailTexture, samplerGroundDetailTexture, SandDetailTexture, samplerSandDetailTexture);
     grassInstances[id.x] = perInst;
+
+    InterlockedAdd(drawArgs[1], 1);
 }
