@@ -13,7 +13,6 @@ namespace Decentraland.Terrain
         [ReadOnly] public ClipVolume CameraFrustum;
         public int2 RectMin;
         public int RectSizeX;
-        public float DetailSqrDistance;
         public NativeList<DetailInstanceData>.ParallelWriter Instances;
 
         public void Execute(int index)
@@ -26,19 +25,11 @@ namespace Decentraland.Terrain
             if (!CameraFrustum.Overlaps(TerrainData.GetParcelBounds(parcel)))
                 return;
 
-            float3 parcelCenter;
-            parcelCenter.x = (parcel.x + 0.5f) * TerrainData.ParcelSize;
-            parcelCenter.z = (parcel.y + 0.5f) * TerrainData.ParcelSize;
-            parcelCenter.y = TerrainData.GetHeight(parcelCenter.x, parcelCenter.z);
+            Random random = TerrainData.GetRandom(parcel);
 
-            if (distancesq(parcelCenter, CameraPosition) <= DetailSqrDistance)
-            {
-                Random random = TerrainData.GetRandom(parcel);
-
-                // TODO: Support more than one detail prototype and have more than one way to scatter
-                // instances.
-                JitteredGrid(parcel, 0, ref random, Instances);
-            }
+            // TODO: Support more than one detail prototype and have more than one way to scatter
+            // instances.
+            JitteredGrid(parcel, 0, ref random, Instances);
         }
 
         private bool JitteredGrid(int2 parcel, int meshIndex,

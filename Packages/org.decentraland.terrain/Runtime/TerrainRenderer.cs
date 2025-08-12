@@ -135,10 +135,13 @@ namespace Decentraland.Terrain
             if (cameraPosition.y < 0f)
                 return;
 
-            Bounds bounds = GetBounds(state.TerrainData);
-            float4x4 worldToClip = camera.projectionMatrix * camera.worldToCameraMatrix;
+            Matrix4x4 viewMatrix = camera.worldToCameraMatrix;
+            Matrix4x4 projMatrix = Matrix4x4.Perspective(camera.fieldOfView, camera.aspect,
+                camera.nearClipPlane, state.TerrainData.DetailDistance);
+            Matrix4x4 worldToClip = projMatrix * viewMatrix;
             var cameraFrustum = new ClipVolume(worldToClip, Allocator.TempJob);
 
+            Bounds bounds = GetBounds(state.TerrainData);
             if (!cameraFrustum.Overlaps(bounds.ToMinMaxAABB()))
             {
                 cameraFrustum.Dispose();
