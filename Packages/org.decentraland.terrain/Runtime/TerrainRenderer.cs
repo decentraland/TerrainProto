@@ -137,7 +137,7 @@ namespace Decentraland.Terrain
 
             Matrix4x4 viewMatrix = camera.worldToCameraMatrix;
             Matrix4x4 projMatrix = Matrix4x4.Perspective(camera.fieldOfView, camera.aspect,
-                camera.nearClipPlane, state.TerrainData.DetailDistance);
+                camera.nearClipPlane, Mathf.Min(camera.farClipPlane, state.TerrainData.DetailDistance));
             Matrix4x4 worldToClip = projMatrix * viewMatrix;
             var cameraFrustum = new ClipVolume(worldToClip, Allocator.TempJob);
 

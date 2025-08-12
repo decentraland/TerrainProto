@@ -250,7 +250,7 @@ namespace Decentraland.Terrain
             // Set camera data
             Matrix4x4 viewMatrix = camera.worldToCameraMatrix;
             Matrix4x4 projMatrix = Matrix4x4.Perspective(camera.fieldOfView, camera.aspect,
-                camera.nearClipPlane, terrainData.DetailDistance);
+                camera.nearClipPlane, Mathf.Min(camera.farClipPlane, terrainData.DetailDistance));
             Matrix4x4 viewProjMatrix = projMatrix * viewMatrix;
 
             Vector4 terrainBounds = new Vector4(terrainData.Bounds.xMin, terrainData.Bounds.xMax,
