@@ -692,7 +692,7 @@ namespace Decentraland.Terrain
         {
             float frequencyCS = 0.1f;
             int octaves = 8;
-            float terrainHeight = 14.0f;
+            float terrainHeight = 4.0f;
 
             float TERRAIN_MIN = -0.9960938f;
             float TERRAIN_MAX = 0.8251953f;
