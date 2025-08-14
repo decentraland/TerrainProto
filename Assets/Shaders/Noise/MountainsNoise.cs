@@ -104,13 +104,13 @@ namespace TerrainProto
 
         internal static float GetHeight(float x, float z)
         {
-            float scale = 0.02f;
+            float scale = 0.0005f;
             float2 octave0 = float2(-99974.82f, -93748.33f);
             float2 octave1 = float2(-67502.3f, -22190.19f);
             float2 octave2 = float2(77881.34f, -61863.88f);
-            float persistence = 0.338f;
-            float lacunarity = 2.9f;
-            float multiplyValue = 3.0f;
+            float persistence = 0.15f;
+            float lacunarity = 1.5f;
+            float multiplyValue = 14.0f;
 
             float amplitude = 1.0f;
             float frequency = 1.0f;
