@@ -19,8 +19,10 @@ Shader "DCL/MountainLit"
         _UseHeightMap("Use HeightMap", Integer) = 0
 
         _OccupancyMap("Occupancy Map", 2D) = "black" {}
+        _DistanceFieldMap("Distance Field Map", 2D) = "black" {}
 
         _terrainScale("Terrain Scale", Float) = 1.0      // Horizontal scale of terrain (e.g., 100.0)
+        _DistanceFieldScale("Distance Field Scale", Float) = 5.0  // Height multiplier for distance field
         _TerrainBounds("Terrain Bounds", Vector) = (0.0, 0.0, 0.0, 0.0) // xmin, xmax, zmin, zmax
         _terrainHeight("Terrain Height", Float) = 10     // Maximum height displacement (e.g., 50.0)
         _octaves("Octaves", Integer) = 4            // Number of noise octaves (e.g., 6-8)

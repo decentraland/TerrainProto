@@ -22,12 +22,27 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 
 
     float heightDerivative2 = SAMPLE_TEXTURE2D_LOD(_HeightMap, sampler_HeightMap, heightUV, 0).x;
 
+    // Sample distance field for additional height boost
+    float distanceFieldValue = SAMPLE_TEXTURE2D_LOD(_DistanceFieldMap, sampler_DistanceFieldMap, heightUV, 0).x;
+
+    // // Get range value from top-left 64x64 square (sample at center: 32,32)
+    // float2 rangeUV = float2(32.0 / 512.0, 32.0 / 512.0);
+    // float rangeValue = SAMPLE_TEXTURE2D_LOD(_DistanceFieldMap, sampler_DistanceFieldMap, rangeUV, 0).x;
+    //
+    // Convert distance field to height boost using inverted logic
+    // 0 = max boost, rangeValue = min boost, >rangeValue = no boost
+    // if (distanceFieldValue <= rangeValue) {
+        // Inside distance field area: invert the values
+        // float heightBoost = (rangeValue - distanceFieldValue) / rangeValue;
+     float distanceFieldHeight =  distanceFieldValue.x;
+    // }
+
     // // In the "worst case", if occupancy is 0.25, it can mean that the current vertex is on a corner
     // // between one occupied parcel and three free ones, and height must be zero.
     if (fOccupancy < 0.25f)
     {
         heightDerivative.x = heightDerivative2;
-        input.positionWS.y += lerp(heightDerivative.x * _terrainHeight, 0.0, fOccupancy * 4.0);
+        input.positionWS.y += lerp(heightDerivative.x * _terrainHeight + distanceFieldHeight, 0.0, fOccupancy * 4.0);
     }
     else
     {
