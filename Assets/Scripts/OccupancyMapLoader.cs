@@ -49,19 +49,31 @@ namespace TerrainProto
             terrainData.OccupancyMap = new Texture2D(size.x, size.y, TextureFormat.R8, false, true);
             NativeArray<byte> data = terrainData.OccupancyMap.GetRawTextureData<byte>();
 
+            // Initialize all as occupied (255)
             for (int i = 0; i < data.Length; i++)
                 data[i] = 255;
 
+            // Mark empty parcels as unoccupied (0)
             for (int i = 0; i < parcels.Length; i++)
             {
                 int2 parcel = parcels[i];
-                data[(parcel.y - minParcel.y) * size.x + parcel.x - minParcel.x] = 0;
+                data[(parcel.y - minParcel.y + 1) * size.x + (parcel.x - minParcel.x + 1)] = 0;
             }
 
-            WriteInteriorChamferOnBlack(
-                terrainData.OccupancyMap,
-                farIsHigh: false       // set false if your shader expects inverted values
-            );
+            // Mark the 1-pixel border as unoccupied (0) so it participates in distance field
+            // But leave everything outside as occupied (255) to affect distance calculation
+            // Top and bottom borders
+            for (int x = 0; x < size.x; x++)
+            {
+                data[0 * size.x + x] = 0; // Top border
+                data[(size.y - 1) * size.x + x] = 0; // Bottom border
+            }
+            // Left and right borders
+            for (int y = 0; y < size.y; y++)
+            {
+                data[y * size.x + 0] = 0; // Left border
+                data[y * size.x + (size.x - 1)] = 0; // Right border
+            }
 
             terrainData.OccupancyMap.Apply(false, false);
             SaveTextureAsR8AssetPNG(terrainData.OccupancyMap, "Assets/Test.png");
@@ -103,6 +115,28 @@ namespace TerrainProto
             
             extendedTexture.Apply(false, false);
             
+            // Now apply distance field calculation to the extended texture
+            int rangeValue = WriteInteriorChamferOnBlack(
+                extendedTexture,
+                farIsHigh: false
+            );
+            
+            // Get the updated data after distance field calculation
+            extendedData = extendedTexture.GetRawTextureData<byte>();
+            
+            // Place range value in top-left 64x64 square of the final extended texture
+            for (int y = 0; y < 64; y++)
+            {
+                for (int x = 0; x < 64; x++)
+                {
+                    extendedData[y * targetSize + x] = (byte)rangeValue;
+                }
+            }
+            
+            Debug.Log($"Range value stored in occupancy map: {rangeValue}");
+            
+            extendedTexture.Apply(false, false);
+            
             // Encode to PNG and write
             var bytes = extendedTexture.EncodeToPNG();
             System.IO.File.WriteAllBytes(assetPath, bytes);
@@ -128,11 +162,11 @@ namespace TerrainProto
         }
 #endif
 
-     public static void WriteInteriorChamferOnBlack(Texture2D r8, bool farIsHigh = false)
+     public static int WriteInteriorChamferOnBlack(Texture2D r8, bool farIsHigh = false)
     {
         int w = r8.width, h = r8.height, n = w * h;
         var src = r8.GetRawTextureData<byte>();
-        if (!src.IsCreated || src.Length != n) return;
+        if (!src.IsCreated || src.Length != n) return 0;
 
         const int INF = 1 << 28;
         const int ORTH = 3; // 3-4 chamfer (good Euclidean approx)
@@ -149,7 +183,7 @@ namespace TerrainProto
         if (!anyBlack || !anyWhite)
         {
             // Nothing to do if no black or no white regions exist.
-            return;
+            return 0;
         }
 
         // Forward pass
@@ -189,24 +223,33 @@ namespace TerrainProto
             }
         }
 
-        // Normalize using only BLACK pixels’ distances
+        // Normalize using only BLACK pixels' distances with 10-value steps
         int maxD = 0;
         for (int i = 0; i < n; i++)
             if (src[i] == 0 && dist[i] < INF && dist[i] > maxD) maxD = dist[i];
-        if (maxD == 0) { r8.Apply(false, false); return; }
+        if (maxD == 0) { r8.Apply(false, false); return 0; }
 
-        float scale = 255f / maxD;
+        // Calculate how many steps we can fit, each step is 10 values
+        const int stepSize = 10;
+        int maxSteps = Mathf.Min(maxD, 25); // Cap at 25 steps to keep values under 255
+        int rangeValue = maxSteps * stepSize; // This will be stored in top-left pixel
 
-        // Write back: keep white at 255, paint gradient inside black
+        // Write back: keep white at 255, paint gradient inside black with 10-value steps
         for (int i = 0; i < n; i++)
         {
-            if (src[i] != 0) { src[i] = 255; continue; } // untouched white
-            int q = Mathf.RoundToInt(dist[i] * scale);
-            q = Mathf.Clamp(q, 0, 255);
-            src[i] = (byte)(farIsHigh ? q : 255 - q);
+            if (src[i] != 0) { src[i] = 255; continue; } // untouched white (occupied)
+            
+            // Convert distance to step number
+            int stepNumber = Mathf.Min(dist[i], maxSteps);
+            int value = stepNumber * stepSize;
+            
+            src[i] = (byte)(farIsHigh ? value : rangeValue - value);
         }
 
+        // Don't place range square here - it will be placed in the final extended texture
+
         r8.Apply(false, false);
+        return rangeValue;
     }
 
         private struct WorldManifest
