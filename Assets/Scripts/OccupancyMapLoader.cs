@@ -64,15 +64,50 @@ namespace TerrainProto
             );
 
             terrainData.OccupancyMap.Apply(false, false);
-
             SaveTextureAsR8AssetPNG(terrainData.OccupancyMap, "Assets/Test.png");
         }
 #if UNITY_EDITOR
         static void SaveTextureAsR8AssetPNG(Texture2D tex, string assetPath)
         {
+            // Extend texture to 512x512 power-of-2 where pixel (264,261) corresponds to parcel (0,0)
+            const int targetSize = 512;
+            const int centerPixelX = 264;
+            const int centerPixelY = 261;
+            
+            Texture2D extendedTexture = new Texture2D(targetSize, targetSize, TextureFormat.R8, false, true);
+            NativeArray<byte> extendedData = extendedTexture.GetRawTextureData<byte>();
+            NativeArray<byte> originalData = tex.GetRawTextureData<byte>();
+            
+            // Initialize all pixels as white (occupied = 255)
+            for (int i = 0; i < extendedData.Length; i++)
+                extendedData[i] = 255;
+            
+            // Calculate offset to center the original texture so that parcel (0,0) maps to pixel (264,261)
+            // The original texture has a 1-pixel border, so we need to account for that
+            int2 offset = int2(centerPixelX - tex.width / 2, centerPixelY - tex.height / 2);
+            
+            // Copy original texture data to the extended texture
+            for (int y = 0; y < tex.height; y++)
+            {
+                for (int x = 0; x < tex.width; x++)
+                {
+                    int targetX = offset.x + x;
+                    int targetY = offset.y + y;
+                    
+                    if (targetX >= 0 && targetX < targetSize && targetY >= 0 && targetY < targetSize)
+                    {
+                        extendedData[targetY * targetSize + targetX] = originalData[y * tex.width + x];
+                    }
+                }
+            }
+            
+            extendedTexture.Apply(false, false);
+            
             // Encode to PNG and write
-            var bytes = tex.EncodeToPNG();
+            var bytes = extendedTexture.EncodeToPNG();
             System.IO.File.WriteAllBytes(assetPath, bytes);
+            
+            DestroyImmediate(extendedTexture);
             UnityEditor.AssetDatabase.ImportAsset(assetPath, UnityEditor.ImportAssetOptions.ForceUpdate);
 
             // Force importer to R8, Linear, Uncompressed
@@ -173,45 +208,6 @@ namespace TerrainProto
 
         r8.Apply(false, false);
     }
-
-        private void GenerateDistanceField(NativeArray<byte> data, int width, int height)
-        {
-            const int maxDistance = 255;
-
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    int index = y * width + x;
-                    if (data[index] == 0) continue;
-
-                    int minDistance = maxDistance;
-
-                    for (int dy = -maxDistance; dy <= maxDistance && minDistance > abs(dy); dy++)
-                    {
-                        int checkY = y + dy;
-                        if (checkY < 0 || checkY >= height) continue;
-
-                        int maxDx = (int)sqrt(minDistance * minDistance - dy * dy);
-                        for (int dx = -maxDx; dx <= maxDx; dx++)
-                        {
-                            int checkX = x + dx;
-                            if (checkX < 0 || checkX >= width) continue;
-
-                            int checkIndex = checkY * width + checkX;
-                            if (data[checkIndex] == 0)
-                            {
-                                int distance = (int)sqrt(dx * dx + dy * dy);
-                                if (distance < minDistance)
-                                    minDistance = distance;
-                            }
-                        }
-                    }
-
-                    data[index] = (byte)min(minDistance, 255);
-                }
-            }
-        }
 
         private struct WorldManifest
         {
