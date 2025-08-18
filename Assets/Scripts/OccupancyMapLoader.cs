@@ -83,9 +83,9 @@ namespace TerrainProto
         {
             // Extend texture to 512x512 power-of-2 where pixel (264,261) corresponds to parcel (0,0)
             const int targetSize = 512;
-            const int centerPixelX = 264;
-            const int centerPixelY = 261;
-            
+            const int centerPixelX = 263;
+            const int centerPixelY = 260;
+
             Texture2D extendedTexture = new Texture2D(targetSize, targetSize, TextureFormat.R8, false, true);
             NativeArray<byte> extendedData = extendedTexture.GetRawTextureData<byte>();
             NativeArray<byte> originalData = tex.GetRawTextureData<byte>();
