@@ -50,7 +50,7 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _HeightScale: 9.1
+    - _HeightScale: 11
     - _InvParcelSize: 16
     - _QueueControl: 0
     - _QueueOffset: 0
