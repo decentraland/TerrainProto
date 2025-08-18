@@ -14,24 +14,53 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 
 
     const int ParcelSize = 16;
     float2 heightUV = (input.positionWS.xz + 4096.0f) / 8192.0f;
-    fOccupancy = GetOccupancy(heightUV, terrainBounds, ParcelSize);
 
-    const float TERRAIN_MIN = -0.9960938;
-    const float TERRAIN_MAX = 0.8615339;
-    const float TERRAIN_RANGE = 1.857628; // Pre-calculated
+    // Sample from the new distance field map instead of occupancy map
+    float height2 = SAMPLE_TEXTURE2D_LOD(_DistanceFieldMap, sampler_DistanceFieldMap, heightUV, 0).r;
+    fOccupancy = height2; // Pass the distance field value for compatibility
+
+    // Get minValue from corner of the texture (as in MountainsNoise.hlsl)
+    float2 rangeUV = float2(16.0 / 512.0, 16.0 / 512.0);
+    float minValue = SAMPLE_TEXTURE2D_LOD(_DistanceFieldMap, sampler_DistanceFieldMap, rangeUV, 0.0).r;
 
     float heightDerivative2 = SAMPLE_TEXTURE2D_LOD(_HeightMap, sampler_HeightMap, heightUV, 0).x;
 
-    // // In the "worst case", if occupancy is 0.25, it can mean that the current vertex is on a corner
-    // // between one occupied parcel and three free ones, and height must be zero.
-    if (fOccupancy < 0.25f)
+    // New stepped height system: 255=occupied, minValue=lowest mountain step, 0=highest peaks
+    // Steps go by 10: 0, 10, 20, 30... up to minValue
+    if (height2 >= minValue)
     {
-        heightDerivative.x = heightDerivative2;
-        input.positionWS.y += lerp(heightDerivative.x * _terrainHeight, 0.0, fOccupancy * 4.0);
+        // Flat surface (occupied parcels and above minValue threshold)
+        input.positionWS.y = 0.0;
     }
     else
     {
-        input.positionWS.y = 0.0;
+        // Mountain area with stepped heights
+        float stepSize = 10.0 / 255.0; // Step size in normalized space
+
+        // Normalize to 0..1 range where 0=highest peaks, 1=lowest mountain step
+        float normalizedHeight = height2 / minValue;
+
+        // Base height from stepped system
+        float baseHeight = (1.0 - normalizedHeight) * _terrainHeight * _DistanceFieldScale;
+
+        heightDerivative.x = heightDerivative2;
+
+        // Noise for surface detail (scaled by terrain scale)
+        float noiseH = GetHeight(input.positionWS.x * _terrainScale, input.positionWS.z * _terrainScale);
+
+        // Smooth transition factor near the boundary with flat surface
+        float smoothness = 6.0;
+        float transitionFactor = saturate((minValue - height2) / (stepSize * smoothness));
+
+        // Combine base height with attenuated noise (add to existing position)
+        input.positionWS.y += baseHeight + noiseH * transitionFactor;
+
+
+        // Ensure no negative heights
+        if (input.positionWS.y < 0.0)
+        {
+            input.positionWS.y = 0.0;
+        }
     }
 
     input.positionVS = TransformWorldToView(input.positionWS);
