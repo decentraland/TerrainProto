@@ -9,12 +9,16 @@ Shader "Custom/OccupancyMapDisplay"
         _CenterY ("Center Y", Float) = 260  
         _MaxRadius ("Max Radius", Float) = 170
         _ParcelSize ("Parcel Size", Float) = 16
+        _BlackAlpha ("Black Alpha (Transparency)", Range(0, 1)) = 1
     }
     
     SubShader
     {
-        Tags { "RenderType"="Opaque" "Queue"="Geometry" }
+        Tags { "RenderType"="Transparent" "Queue"="Transparent" }
         LOD 100
+        
+        Blend SrcAlpha OneMinusSrcAlpha
+        ZWrite Off
         
         Pass
         {
@@ -45,6 +49,7 @@ Shader "Custom/OccupancyMapDisplay"
             float _CenterY;
             float _MaxRadius;
             float _ParcelSize;
+            float _BlackAlpha;
             
             v2f vert (appdata v)
             {
@@ -88,7 +93,15 @@ Shader "Custom/OccupancyMapDisplay"
                 
                 // Делаем четкий threshold (>0.5 = белый, <=0.5 = черный)
                 float threshold = 0.5;
-                fixed4 finalColor = texColor.r > threshold ? _WhiteColor : _BlackColor;
+                bool isOccupied = texColor.r > threshold;
+                
+                fixed4 finalColor = isOccupied ? _WhiteColor : _BlackColor;
+                
+                // Применяем настраиваемую прозрачность к черным участкам
+                if (!isOccupied)
+                {
+                    finalColor.a = _BlackAlpha;
+                }
                 
                 return finalColor;
             }

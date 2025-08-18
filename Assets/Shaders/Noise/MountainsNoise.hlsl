@@ -20,7 +20,8 @@ void Noise_float(float3 PositionIn, float ParcelSize, float4 TerrainBounds,
     // Steps go by 10: 0, 10, 20, 30... up to minValue
     float stepSize = 10.0 / 255.0; // Step size in normalized space
 
-    if (height2 >= minValue - stepSize)
+    float threshold = minValue - 3*stepSize;
+    if (height2 >= threshold)
     {
         // Flat surface (occupied parcels and above minValue threshold)
         PositionOut.y = 0.0;
@@ -29,14 +30,14 @@ void Noise_float(float3 PositionIn, float ParcelSize, float4 TerrainBounds,
     else // Mountain area with stepped heights
     {
         // Normalize height to 0..1 range where 1 = highest peaks (height2 = 0 a.k.a black), 0 = lowest mountain step
-        float normalizedHeight = 1.0 - height2 / minValue;
+        float normalizedHeight = 1.0 - height2 / threshold;
 
         // Noise for surface detail
         float noiseH = GetHeight(PositionOut.x, PositionOut.z);
 
         // Smooth transition factor near the boundary with flat surface
-        float smoothness = 6;
-        float transitionFactor = saturate((minValue - height2) / (stepSize * smoothness));
+        float smoothness = 2;
+        float transitionFactor = saturate((threshold - height2) / (stepSize * smoothness));
 
         // Combine base height with attenuated noise
         PositionOut.y = normalizedHeight * HeightScale + noiseH * transitionFactor;
