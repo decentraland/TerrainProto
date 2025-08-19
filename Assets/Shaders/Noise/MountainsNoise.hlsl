@@ -14,7 +14,7 @@ void Noise_float(float3 PositionIn, float ParcelSize, float4 TerrainBounds,
     float minValue = 175.0 / 255.0;
     float stepSize = 10.0 / 255.0;
 
-    if (height <= minValue + stepSize) //0.25
+    if (height <= minValue) //0.25
     {
         // Flat surface (occupied parcels and above minValue threshold)
         PositionOut.y = 0.0;
