@@ -10,18 +10,11 @@ void Noise_float(float3 PositionIn, float ParcelSize, float4 TerrainBounds,
     float2 uv = (PositionOut.xz * InvParcelSize + OccupancyMap.texelSize.z * 0.5)
         * OccupancyMap.texelSize.x;
 
-    //float occupancy = SAMPLE_TEXTURE2D_LOD(OccupancyMap, OccupancyMap.samplerstate, uv, 0.0).r;
+    float height = SAMPLE_TEXTURE2D_LOD(HeightMap, HeightMap.samplerstate, uv, 0.0).r;
+    float minValue = 175.0 / 255.0;
+    float stepSize = 10.0 / 255.0;
 
-    float2 rangeUV = float2(16.0 / 512.0, 16.0 / 512.0);
-    float minValue = SAMPLE_TEXTURE2D_LOD(HeightMap, HeightMap.samplerstate, rangeUV, 0.0).r;
-    float height2 = SAMPLE_TEXTURE2D_LOD(HeightMap, HeightMap.samplerstate, uv, 0.0).r;
-    //float normalizedInverted = (minValue - height2) / minValue;
-    // New stepped height system: 255=occupied, minValue=lowest mountain step, 0=highest peaks
-    // Steps go by 10: 0, 10, 20, 30... up to minValue
-    float stepSize = 10.0 / 255.0; // Step size in normalized space
-
-    float threshold = minValue - 3*stepSize;
-    if (height2 >= threshold)
+    if (height <= minValue + stepSize) //0.25
     {
         // Flat surface (occupied parcels and above minValue threshold)
         PositionOut.y = 0.0;
@@ -30,24 +23,22 @@ void Noise_float(float3 PositionIn, float ParcelSize, float4 TerrainBounds,
     else // Mountain area with stepped heights
     {
         // Normalize height to 0..1 range where 1 = highest peaks (height2 = 0 a.k.a black), 0 = lowest mountain step
-        float normalizedHeight = 1.0 - height2 / threshold;
 
         // Noise for surface detail
-        float noiseH = GetHeight(PositionOut.x, PositionOut.z);
-
-        // Smooth transition factor near the boundary with flat surface
-        float smoothness = 2;
-        float transitionFactor = saturate((threshold - height2) / (stepSize * smoothness));
+        // float noiseH = GetHeight(PositionOut.x, PositionOut.z);
+        // float smoothness = 2;
+        // float transitionFactor = saturate((threshold - height) / (stepSize * smoothness));
 
         // Combine base height with attenuated noise
-        PositionOut.y = normalizedHeight * HeightScale + noiseH * transitionFactor;
+        float normalizedHeight = (height - minValue) / (1 - minValue);
+        PositionOut.y = normalizedHeight * HeightScale;// + noiseH * transitionFactor;
         Normal = GetNormal(PositionOut.x, PositionOut.z);
 
         // Ensure no negative heights
-        if (PositionOut.y < 0.0)
-        {
-            PositionOut.y = 0.0;
-            Normal = float3(0.0, 1.0, 0.0);
-        }
+        // if (PositionOut.y < 0.0)
+        // {
+        //     PositionOut.y = 0.0;
+        //     Normal = float3(0.0, 1.0, 0.0);
+        // }
     }
 }

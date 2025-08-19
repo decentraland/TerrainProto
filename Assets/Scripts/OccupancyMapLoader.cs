@@ -89,15 +89,15 @@ namespace TerrainProto
             Texture2D extendedTexture = new Texture2D(targetSize, targetSize, TextureFormat.R8, false, true);
             NativeArray<byte> extendedData = extendedTexture.GetRawTextureData<byte>();
             NativeArray<byte> originalData = tex.GetRawTextureData<byte>();
-            
+
             // Initialize all pixels as white (occupied = 255)
             for (int i = 0; i < extendedData.Length; i++)
                 extendedData[i] = 255;
-            
+
             // Calculate offset to center the original texture so that parcel (0,0) maps to pixel (264,261)
             // The original texture has a 1-pixel border, so we need to account for that
             int2 offset = int2(centerPixelX - tex.width / 2, centerPixelY - tex.height / 2);
-            
+
             // Copy original texture data to the extended texture
             for (int y = 0; y < tex.height; y++)
             {
@@ -105,25 +105,25 @@ namespace TerrainProto
                 {
                     int targetX = offset.x + x;
                     int targetY = offset.y + y;
-                    
+
                     if (targetX >= 0 && targetX < targetSize && targetY >= 0 && targetY < targetSize)
                     {
                         extendedData[targetY * targetSize + targetX] = originalData[y * tex.width + x];
                     }
                 }
             }
-            
+
             extendedTexture.Apply(false, false);
-            
+
             // Now apply distance field calculation to the extended texture
             int rangeValue = WriteInteriorChamferOnBlack(
                 extendedTexture,
                 farIsHigh: false
             );
-            
+
             // Get the updated data after distance field calculation
             extendedData = extendedTexture.GetRawTextureData<byte>();
-            
+
             // Place range value in top-left 64x64 square of the final extended texture
             for (int y = 0; y < 64; y++)
             {
@@ -132,15 +132,15 @@ namespace TerrainProto
                     extendedData[y * targetSize + x] = (byte)rangeValue;
                 }
             }
-            
+
             Debug.Log($"Range value stored in occupancy map: {rangeValue}");
-            
+
             extendedTexture.Apply(false, false);
-            
+
             // Encode to PNG and write
             var bytes = extendedTexture.EncodeToPNG();
             System.IO.File.WriteAllBytes(assetPath, bytes);
-            
+
             DestroyImmediate(extendedTexture);
             UnityEditor.AssetDatabase.ImportAsset(assetPath, UnityEditor.ImportAssetOptions.ForceUpdate);
 
@@ -238,11 +238,11 @@ namespace TerrainProto
         for (int i = 0; i < n; i++)
         {
             if (src[i] != 0) { src[i] = 255; continue; } // untouched white (occupied)
-            
+
             // Convert distance to step number
             int stepNumber = Mathf.Min(dist[i], maxSteps);
             int value = stepNumber * stepSize;
-            
+
             src[i] = (byte)(farIsHigh ? value : rangeValue - value);
         }
 
