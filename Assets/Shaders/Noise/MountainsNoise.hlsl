@@ -6,14 +6,11 @@ void Noise_float(float3 PositionIn, float ParcelSize, float4 TerrainBounds,
     PositionOut.x = clamp(PositionIn.x, TerrainBounds.x, TerrainBounds.y);
     PositionOut.z = clamp(PositionIn.z, TerrainBounds.z, TerrainBounds.w);
 
-    float InvParcelSize = ParcelSize;
-    float2 uv = (PositionOut.xz * InvParcelSize + OccupancyMap.texelSize.z * 0.5)
+    float2 uv = (PositionOut.xz * ParcelSize + OccupancyMap.texelSize.z * 0.5)
         * OccupancyMap.texelSize.x;
 
-    float height = SAMPLE_TEXTURE2D_LOD(HeightMap, HeightMap.samplerstate, uv, 0.0).r;
+    float height = SAMPLE_TEXTURE2D_LOD(OccupancyMap, OccupancyMap.samplerstate, uv, 0.0).r;
     float minValue = 175.0 / 255.0;
-    float stepSize = 10.0 / 255.0;
-
     if (height <= minValue) //0.25
     {
         // Flat surface (occupied parcels and above minValue threshold)

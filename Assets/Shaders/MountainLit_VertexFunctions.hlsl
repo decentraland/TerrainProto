@@ -14,12 +14,11 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 
 
     float2 heightUV = (input.positionWS.xz + 4096.0f) / 8192.0f;
     float heightDerivative2 = SAMPLE_TEXTURE2D_LOD(_HeightMap, sampler_HeightMap, heightUV, 0).x;
-    fOccupancy = SAMPLE_TEXTURE2D_LOD(_DistanceFieldMap, sampler_DistanceFieldMap, heightUV, 0).r;
+    fOccupancy = SAMPLE_TEXTURE2D_LOD(_OccupancyMap, sampler_OccupancyMap, heightUV, 0).r;
 
     float minValue = 175.0 / 255.0;
-    float stepSize = 10.0 / 255.0;
 
-    if (fOccupancy <= minValue + stepSize)
+    if (fOccupancy <= minValue)
     {
         // Flat surface (occupied parcels and above minValue threshold)
         input.positionWS.y = 0.0;
