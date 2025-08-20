@@ -92,7 +92,10 @@ float CalculateHeightFromHeightmap(float2 uv, float terrainHeight, float fOccupa
     float height11 = _heightMapTexture.SampleLevel(_heightMapSampler, uv + float2(_Heightmap_TexelSize, _Heightmap_TexelSize), 0).r;
 
     float height = (height00 + height10 + height01 + height11) * 0.25f;
-    height = lerp(height * terrainHeight, 0.0, fOccupancy * 4.0);
+
+    float minValue = 175.f/255.f;
+    float normalizedHeight = (fOccupancy - minValue) / (1 - minValue);
+    height = normalizedHeight * terrainHeight; //= lerp(0.0, height * terrainHeight, fOccupancy * 4.0);
     height = max(0.0f, height);
     return height;
 }
