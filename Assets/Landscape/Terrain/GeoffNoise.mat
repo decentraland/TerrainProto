@@ -237,8 +237,8 @@ Material:
     - _sandScale: 0
     - _sandSoftness: 0
     - _sandThreshold: 0
-    - _terrainHeight: 4
-    - _terrainScale: 1
+    - _terrainHeight: 13
+    - _terrainScale: 13
     - _yellowThreshold: 0.005
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
