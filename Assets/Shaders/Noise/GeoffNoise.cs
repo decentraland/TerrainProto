@@ -692,16 +692,17 @@ namespace Decentraland.Terrain
         {
             float frequencyCS = 0.1f;
             int octaves = 8;
-            float terrainHeight = 4.0f;
+            float terrainHeight = 13.0f;
 
             float TERRAIN_MIN = -0.9960938f;
             float TERRAIN_MAX = 0.8251953f;
             float TERRAIN_RANGE = 1.8212891f; // Pre-calculated
 
             float4 terrainData = terrain( float3(x, 0.0f, z), frequencyCS, octaves);
+            // Return noise in range [-1, 1] instead of [0, 1] to allow both positive and negative displacement
             float height = (terrainData.x - TERRAIN_MIN) / TERRAIN_RANGE;
-            height = saturate(height);
-            return height * terrainHeight;
+            height = clamp(height, 0.0f, 1.0f);
+            return (height * 2.0f - 1.0f) * terrainHeight; // Remap to [-terrainHeight, terrainHeight]
         }
 
         internal static float3 GetNormal(float x, float z)
