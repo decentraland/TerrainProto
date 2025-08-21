@@ -19,23 +19,19 @@ void Noise_float(float3 PositionIn, float ParcelSize, float4 TerrainBounds,
     }
     else // Mountain area with stepped heights
     {
-        // Normalize height to 0..1 range where 1 = highest peaks (height2 = 0 a.k.a black), 0 = lowest mountain step
-
-        // Noise for surface detail
-        // float noiseH = GetHeight(PositionOut.x, PositionOut.z);
-        // float smoothness = 2;
-        // float transitionFactor = saturate((threshold - height) / (stepSize * smoothness));
-
-        // Combine base height with attenuated noise
         float normalizedHeight = (height - minValue) / (1 - minValue);
-        PositionOut.y = normalizedHeight * HeightScale;// + noiseH * transitionFactor;
+
+        float saturationFactor = 20;
+        float noiseH = GetHeight(PositionOut.x, PositionOut.z) * saturate( normalizedHeight * saturationFactor);
+
+        PositionOut.y = normalizedHeight * HeightScale + noiseH;
         Normal = GetNormal(PositionOut.x, PositionOut.z);
 
         // Ensure no negative heights
-        // if (PositionOut.y < 0.0)
-        // {
-        //     PositionOut.y = 0.0;
-        //     Normal = float3(0.0, 1.0, 0.0);
-        // }
+        if (PositionOut.y < 0.0)
+        {
+            PositionOut.y = 0.0;
+            Normal = float3(0.0, 1.0, 0.0);
+        }
     }
 }
