@@ -267,23 +267,26 @@ namespace Decentraland.Terrain
                 // size to the next power of two, map xz=0,0 to uv=0.5,0.5 and parcelSize to pixel size,
                 // and that's the occupancy map.
                 float2 uv = (float2(x, z) / ParcelSize + occupancyMapSize * 0.5f) / occupancyMapSize;
-                occupancy = SampleBilinearClamp(occupancyMap, occupancyMapSize, uv);
+                occupancy = SampleBilinearClamp(occupancyMap, int2(occupancyMapSize, occupancyMapSize), uv);
             }
             else
             {
                 occupancy = 0f;
             }
 
+            // float height = SAMPLE_TEXTURE2D_LOD(HeightMap, HeightMap.samplerstate, uv, 0.0).r;
+            float minValue = 175.0f / 255.0f; // 0.68
+
             // In the "worst case", if occupancy is 0.25, it can mean that the current vertex is on a
             // corner between one occupied parcel and three free ones, and height must be zero.
-            if (occupancy < 0.25f)
+            if (occupancy <= minValue)
             {
-                float height = getHeight.Invoke(x, z);
-                return lerp(height, 0f, occupancy * 4f);
+                return 0f;
             }
             else
             {
-                return 0f;
+                float normalizedHeight = (occupancy - minValue) / (1 - minValue);
+                return normalizedHeight * maxHeight;// + noiseH * transitionFactor;
             }
         }
 

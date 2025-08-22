@@ -51,7 +51,8 @@ void HierarchicalQuadTreeCulling(uint3 id : SV_DispatchThreadID, uint3 groupId :
         {
             float2 UV_Coords = (float2(plot.x * 16, plot.y * 16) + 4096) / 8192;
             float fOccupancy = GetOccupancy(UV_Coords, TerrainBounds, 16);
-            if (fOccupancy < 0.5f)
+            float floorValue = 175/255;
+            if (fOccupancy > floorValue)
             {
                 uint outputIndex;
                 InterlockedAdd(visibleParcelCount[0], 1, outputIndex);

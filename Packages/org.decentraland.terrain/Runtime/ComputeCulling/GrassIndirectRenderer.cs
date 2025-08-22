@@ -289,7 +289,7 @@ namespace Decentraland.Terrain
                 terrainData.Bounds.yMin, terrainData.Bounds.yMax);
 
             ScatterGrassShader.SetVector("TerrainBounds", terrainBounds);
-            ScatterGrassShader.SetFloat("TerrainHeight", 4.0f);
+            ScatterGrassShader.SetFloat("TerrainHeight", terrainData.MaxHeight);
             ScatterGrassShader.SetTexture(kernelIndex, "HeightMapTexture", HeightMapTexture);
             ScatterGrassShader.SetTexture(kernelIndex, "TerrainBlendTexture", TerrainBlendTexture);
             ScatterGrassShader.SetTexture(kernelIndex, "GroundDetailTexture", GroundDetailTexture);

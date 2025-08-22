@@ -12,26 +12,30 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 
     input.positionWS = TransformObjectToWorld(positionOS);
     input.positionWS = ClampPosition(input.positionWS, terrainBounds);
 
-    const int ParcelSize = 16;
     float2 heightUV = (input.positionWS.xz + 4096.0f) / 8192.0f;
-    fOccupancy = GetOccupancy(heightUV, terrainBounds, ParcelSize);
-
-    const float TERRAIN_MIN = -0.9960938;
-    const float TERRAIN_MAX = 0.8615339;
-    const float TERRAIN_RANGE = 1.857628; // Pre-calculated
-
     float heightDerivative2 = SAMPLE_TEXTURE2D_LOD(_HeightMap, sampler_HeightMap, heightUV, 0).x;
+    fOccupancy = SAMPLE_TEXTURE2D_LOD(_OccupancyMap, sampler_OccupancyMap, heightUV, 0).r;
 
-    // // In the "worst case", if occupancy is 0.25, it can mean that the current vertex is on a corner
-    // // between one occupied parcel and three free ones, and height must be zero.
-    if (fOccupancy < 0.25f)
+    float minValue = 175.0 / 255.0;
+
+    if (fOccupancy <= minValue) // Flat surface (occupied parcels and above minValue threshold)
     {
-        heightDerivative.x = heightDerivative2;
-        input.positionWS.y += lerp(heightDerivative.x * _terrainHeight, 0.0, fOccupancy * 4.0);
+        input.positionWS.y = 0.0;
     }
     else
     {
-        input.positionWS.y = 0.0;
+        heightDerivative.x = heightDerivative2;
+
+        // Calculate normalized height first
+        float normalizedHeight = (fOccupancy - minValue) / (1 - minValue);
+
+        float noiseH = GetHeight(input.positionWS.x, input.positionWS.z);
+        float noiseIntensity = lerp(0.0f, 0.5f, normalizedHeight);
+
+        input.positionWS.y += normalizedHeight * _terrainHeight + noiseH * noiseIntensity;
+
+        // Ensure no negative heights
+        if (input.positionWS.y < 0.0) input.positionWS.y = 0.0;
     }
 
     input.positionVS = TransformWorldToView(input.positionWS);

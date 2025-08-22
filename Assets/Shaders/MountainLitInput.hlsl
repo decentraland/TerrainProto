@@ -72,7 +72,7 @@ void SetupDOTSSimpleLitMaterialPropertyCaches()
     unity_DOTS_Sampled_Cutoff               = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _Cutoff);
     unity_DOTS_Sampled_Surface              = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _Surface);
     unity_DOTS_Sampled_terrainScale         = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _terrainScale);
-    unity_DOTS_Sampled_terrainScale         = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _TerrainBounds);
+    unity_DOTS_Sampled_TerrainBounds        = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4  , _TerrainBounds);
     unity_DOTS_Sampled_terrainHeight        = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _terrainHeight);
     unity_DOTS_Sampled_octaves              = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(int  , _octaves);
     unity_DOTS_Sampled_frequency            = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float  , _frequency);
@@ -103,7 +103,6 @@ void SetupDOTSSimpleLitMaterialPropertyCaches()
 #define _RedThreshold           unity_DOTS_Sampled_RedThreshold
 #define _YellowThreshold        unity_DOTS_Sampled_YellowThreshold
 #define _BlendSmoothness        unity_DOTS_Sampled_BlendSmoothness
-
 #endif
 
 TEXTURE2D(_SpecGlossMap);       SAMPLER(sampler_SpecGlossMap);

@@ -53,6 +53,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _DistanceFieldMap:
+        m_Texture: {fileID: 2800000, guid: 11e18e96b7d544b49a42acc656cd3cde, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _EmissionMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -114,7 +118,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _OccupancyMap:
-        m_Texture: {fileID: 2800000, guid: 3fb0d1129424bdb40a89f785c5ec75a8, type: 3}
+        m_Texture: {fileID: 2800000, guid: 11e18e96b7d544b49a42acc656cd3cde, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _ParallaxMap:
@@ -184,8 +188,10 @@ Material:
     - _ClearCoatSmoothness: 0
     - _Cull: 2
     - _Cutoff: 0.5
+    - _DebugDistanceField: 0
     - _DetailAlbedoMapScale: 1
     - _DetailNormalMapScale: 1
+    - _DistanceFieldScale: 13
     - _DstBlend: 0
     - _DstBlendAlpha: 0
     - _EnableHeightBlend: 0
@@ -231,8 +237,8 @@ Material:
     - _sandScale: 0
     - _sandSoftness: 0
     - _sandThreshold: 0
-    - _terrainHeight: 4
-    - _terrainScale: 0
+    - _terrainHeight: 13
+    - _terrainScale: 13
     - _yellowThreshold: 0.005
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}

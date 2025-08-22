@@ -145,14 +145,19 @@ void CalculateNormalFromHeightmap(float2 uv, float fOccupancy, out float3 normal
     float heightD = SAMPLE_TEXTURE2D_LOD(_HeightMap, sampler_HeightMap, uv + float2(0, -_Heightmap_TexelSize.y), 0).r; // Down
     float heightU = SAMPLE_TEXTURE2D_LOD(_HeightMap, sampler_HeightMap, uv + float2(0, _Heightmap_TexelSize.y), 0).r;  // Up
 
-    // Calculate the gradient in world space (Y is up in Unity)
-    // Since each vertex is 1 meter apart, the horizontal distance is 2.0 (left to right)
-    float3 va = float3(2.0, lerp((heightR - heightL) * _terrainHeight, 0.0f, fOccupancy * 4.0), 0.0); // X direction
-    float3 vb = float3(0.0, lerp((heightU - heightD) * _terrainHeight, 0.0f, fOccupancy * 4.0), 2.0); // Z direction
+    float minValue = 175/255;
+    float normalizedHeight = (fOccupancy - minValue) / (1 - minValue);
+
+    // Apply the same attenuation as in vertex shader
+    float heightDiffX = (fOccupancy >= minValue) ? 0.0 : (heightR - heightL) * normalizedHeight * _terrainHeight;
+    float heightDiffZ = (fOccupancy >= minValue) ? 0.0 : (heightU - heightD) * normalizedHeight * _terrainHeight;
+
+    float3 va = float3(2.0, heightDiffX, 0.0); // X direction
+    float3 vb = float3(0.0, heightDiffZ, 2.0); // Z direction
     // Cross product to get the normal
     normalWS = normalize(cross(vb, va));
 
-    tangentWS = normalize(float3(2.0, (heightR - heightL) * _terrainHeight, 0.0));
+    tangentWS = normalize(float3(2.0, heightDiffX, 0.0));
 
     // Calculate handedness (for normal mapping)
     bitangentWS = cross(normalWS, tangentWS);
