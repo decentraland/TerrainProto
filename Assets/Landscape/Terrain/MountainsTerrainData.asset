@@ -25,7 +25,7 @@ MonoBehaviour:
   <DetailDistance>k__BackingField: 200
   <RenderGround>k__BackingField: 1
   <RenderTrees>k__BackingField: 0
-  <RenderDetail>k__BackingField: 1
+  <RenderDetail>k__BackingField: 0
   <GroundInstanceCapacity>k__BackingField: 80
   <TreeInstanceCapacity>k__BackingField: 3000
   <ClutterInstanceCapacity>k__BackingField: 1

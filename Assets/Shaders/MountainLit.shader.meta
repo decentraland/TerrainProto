@@ -7,7 +7,11 @@ ShaderImporter:
   - _SpecGlossMap: {instanceID: 0}
   - _HeightMap: {instanceID: 0}
   - _OccupancyMap: {instanceID: 0}
-  - _BlendMap: {instanceID: 0}
+  - _TerrainMaskMap: {instanceID: 0}
+  - _GroundDetailMap: {instanceID: 0}
+  - _SandDetailMap: {instanceID: 0}
+  - _GroundNormalMap: {instanceID: 0}
+  - _SandNormalMap: {instanceID: 0}
   - _BumpMap: {instanceID: 0}
   - _EmissionMap: {instanceID: 0}
   - _MainTex: {instanceID: 0}

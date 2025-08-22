@@ -10,8 +10,6 @@ namespace TerrainProto
     [BurstCompile, CreateAssetMenu]
     public sealed class MountainsTerrainData : TerrainData
     {
-        [SerializeField] private Texture2D heightMap;
-
         protected override void CompileNoiseFunctions()
         {
             getHeight = BurstCompiler.CompileFunctionPointer(new GetHeightDelegate(GetHeight));
@@ -19,10 +17,8 @@ namespace TerrainProto
         }
 
         [BurstCompile, MonoPInvokeCallback(typeof(GetHeightDelegate))]
-        private static float GetHeight(float x, float z)
-        {
-            return MountainsNoise.GetHeight(x, z);
-        }
+        private static float GetHeight(float x, float z) =>
+            MountainsNoise.GetHeight(x, z);
 
         [BurstCompile, MonoPInvokeCallback(typeof(GetNormalDelegate))]
         private static void GetNormal(float x, float z, out float3 normal) =>
