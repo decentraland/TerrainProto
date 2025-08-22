@@ -18,9 +18,8 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 
 
     float minValue = 175.0 / 255.0;
 
-    if (fOccupancy <= minValue)
+    if (fOccupancy <= minValue) // Flat surface (occupied parcels and above minValue threshold)
     {
-        // Flat surface (occupied parcels and above minValue threshold)
         input.positionWS.y = 0.0;
     }
     else
@@ -31,14 +30,11 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 
         float noiseH = GetHeight(input.positionWS.x, input.positionWS.z);
         float noiseIntensity = lerp(0.0f, 0.5f, normalizedHeight);
 
-        input.positionWS.y += normalizedHeight * _DistanceFieldScale + noiseH * noiseIntensity;
+        input.positionWS.y += normalizedHeight * _terrainHeight + noiseH * noiseIntensity;
         heightDerivative.x = heightDerivative2;
 
         // Ensure no negative heights
-        if (input.positionWS.y < 0.0)
-        {
-            input.positionWS.y = 0.0;
-        }
+        if (input.positionWS.y < 0.0) input.positionWS.y = 0.0;
     }
 
     input.positionVS = TransformWorldToView(input.positionWS);

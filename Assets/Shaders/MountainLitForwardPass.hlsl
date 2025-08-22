@@ -145,19 +145,12 @@ void CalculateNormalFromHeightmap(float2 uv, float fOccupancy, out float3 normal
     float heightD = SAMPLE_TEXTURE2D_LOD(_HeightMap, sampler_HeightMap, uv + float2(0, -_Heightmap_TexelSize.y), 0).r; // Down
     float heightU = SAMPLE_TEXTURE2D_LOD(_HeightMap, sampler_HeightMap, uv + float2(0, _Heightmap_TexelSize.y), 0).r;  // Up
 
-    // Get minValue for the new distance field logic (same as in vertex function)
-    float2 rangeUV = float2(16.0 / 512.0, 16.0 / 512.0);
-    float minValue = SAMPLE_TEXTURE2D_LOD(_DistanceFieldMap, sampler_DistanceFieldMap, rangeUV, 0.0).r;
-
-    // Calculate the gradient in world space using new stepped height system
-    // fOccupancy now contains the distance field value (height2)
-    float stepSize = 10.0 / 255.0;
-    float smoothness = 6.0;
-    float transitionFactor = saturate((minValue - fOccupancy) / (stepSize * smoothness));
+    float minValue = 175/255;
+    float normalizedHeight = (fOccupancy - minValue) / (1 - minValue);
 
     // Apply the same attenuation as in vertex shader
-    float heightDiffX = (fOccupancy >= minValue) ? 0.0 : (heightR - heightL) * _terrainHeight * transitionFactor;
-    float heightDiffZ = (fOccupancy >= minValue) ? 0.0 : (heightU - heightD) * _terrainHeight * transitionFactor;
+    float heightDiffX = (fOccupancy >= minValue) ? 0.0 : (heightR - heightL) * normalizedHeight * _terrainHeight;
+    float heightDiffZ = (fOccupancy >= minValue) ? 0.0 : (heightU - heightD) * normalizedHeight * _terrainHeight;
 
     float3 va = float3(2.0, heightDiffX, 0.0); // X direction
     float3 vb = float3(0.0, heightDiffZ, 2.0); // Z direction
