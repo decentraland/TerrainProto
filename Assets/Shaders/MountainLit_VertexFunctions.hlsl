@@ -24,14 +24,13 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 
     }
     else
     {
+        heightDerivative.x = heightDerivative2;
+
         // Calculate normalized height first
         float normalizedHeight = (fOccupancy - minValue) / (1 - minValue);
 
         float noiseH = GetHeight(input.positionWS.x, input.positionWS.z);
         float noiseIntensity = lerp(0.0f, 0.5f, normalizedHeight);
-
-        input.positionWS.y += normalizedHeight * _terrainHeight + noiseH * noiseIntensity;
-        heightDerivative.x = heightDerivative2;
 
         input.positionWS.y += normalizedHeight * _terrainHeight + noiseH * noiseIntensity;
 
