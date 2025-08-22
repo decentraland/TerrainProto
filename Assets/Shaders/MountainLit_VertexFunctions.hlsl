@@ -33,6 +33,8 @@ VertexPositionInputs GetVertexPositionInputs_Mountain(float3 positionOS, float4 
         input.positionWS.y += normalizedHeight * _terrainHeight + noiseH * noiseIntensity;
         heightDerivative.x = heightDerivative2;
 
+        input.positionWS.y += normalizedHeight * _terrainHeight + noiseH * noiseIntensity;
+
         // Ensure no negative heights
         if (input.positionWS.y < 0.0) input.positionWS.y = 0.0;
     }

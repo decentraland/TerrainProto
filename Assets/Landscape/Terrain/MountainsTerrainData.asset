@@ -283,4 +283,3 @@ MonoBehaviour:
     <MaxScaleY>k__BackingField: 2
     <Mesh>k__BackingField: {fileID: 8666578268043267355, guid: 396ff52ab0b0210408b55a00b0c3cd57, type: 3}
     <Material>k__BackingField: {fileID: 2100000, guid: 1fb265a1eb82642428d82e5c54ad2148, type: 2}
-  heightMap: {fileID: 2800000, guid: 11e18e96b7d544b49a42acc656cd3cde, type: 3}
